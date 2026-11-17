@@ -4,7 +4,7 @@ local Addon, Engine = ns.Addon, ns.Engine
 
 local HELP = {
     "|cffffd100/idwlc|r - open the reserve window",
-    "|cffffd100/idwlc hr <item>|r / |cffffd100sr <item>|r - toggle a hard / soft reserve (shift-click an item)",
+    "|cffffd100/idwlc hr <item>|r / |cffffd100sr <item>|r - add/remove an item in your hard / soft tier for the current raid",
     "|cffffd100/idwlc list|r - show reserves in chat",
     "|cffffd100/idwlc status|r - show raid settings and your reserves left",
     "Raid leader:",
@@ -55,12 +55,15 @@ end
 
 commands.status = function()
     local s = Addon.session
-    local h, so = s:Remaining(Addon:PlayerName())
-    local mh, ms = ns.Reserves:GetMine()
     Addon:Print("Raid: %s | HR %d, SR %d per player | %s",
         ns.RaidDataAPI:GetName(s.raidKey), s.settings.hardReserves, s.settings.softReserves,
         s.locked and "|cffff5555LOCKED|r" or "|cff55ff55open|r")
-    Addon:Print("Your picks: %d hard, %d soft (leader has you at %d/%d left)", #mh, #ms, h, so)
+    local _, _, sh, ss = ns.Reserves:GetSelection()
+    Addon:Print("Your reserves: %s", ns.Reserves:DescribeMine())
+    Addon:Print("On standby in your tiers: %d hard, %d soft", #(sh or {}), #(ss or {}))
+    if Addon:IsLeader() then
+        Addon:Print("Saved preset for this raid: %s", ns.Reserves:HasPreset(s.raidKey) and "yes" or "no (using your defaults)")
+    end
 end
 
 commands.raids = function()

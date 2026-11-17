@@ -7,9 +7,10 @@ local Addon, Engine, UI = ns.Addon, ns.Engine, ns.UI
 local Reserves, RaidData = ns.Reserves, ns.RaidDataAPI
 local HARD, SOFT = Engine.KIND.HARD, Engine.KIND.SOFT
 
-local WIDTH, HEIGHT = 560, 580
+local WIDTH, HEIGHT = 560, 594
 local ROW_H = 20
 local MAX_COUNT = 10
+local SAVED_TIP = "Saved for this raid and announced to the raid automatically."
 
 local frame
 
@@ -126,11 +127,19 @@ local function refresh(self)
         or UI.Color("ff9933", "Read-only: only the raid leader can change these settings."))
 
     self.raidButton:SetText(s.raidKey and RaidData:GetName(s.raidKey) or "(choose raid)")
+    if not leader then
+        self.presetNote:SetText(UI.Color(UI.GREY, "Rules are set by the raid leader."))
+    elseif not s.raidKey then
+        self.presetNote:SetText(UI.Color(UI.GREY, "Choose a raid - its rules are saved per raid."))
+    elseif Reserves:HasPreset(s.raidKey) then
+        self.presetNote:SetText(UI.Color("40ff40", "Saved rules for this raid"))
+    else
+        self.presetNote:SetText(UI.Color(UI.GREY, "Using your default rules - changes will be saved for this raid"))
+    end
     self.lockButton:SetText(s.locked and "Unlock reserves" or "Lock reserves")
     self.lockState:SetText(s.locked and UI.Color("ff4040", "LOCKED") or UI.Color("40ff40", "Open"))
     self.hardValue:SetText(s.settings.hardReserves)
     self.softValue:SetText(s.settings.softReserves)
-    self.exclusive:SetChecked(s.settings.exclusiveHardReserves)
     self.double:SetChecked(s.settings.allowDoubleSoft)
     self.consume:SetChecked(s.settings.consumeOnAward)
 
@@ -159,13 +168,13 @@ end
 local function counter(f, label, x, y, onMinus, onPlus)
     local l = UI:Label(f, label, "GameFontNormal")
     l:SetPoint("TOPLEFT", x, y)
-    local minus = UI:Button(f, "-", 22, 20, onMinus)
+    local minus = UI:Button(f, "-", 22, 20, onMinus, SAVED_TIP)
     minus:SetPoint("LEFT", l, "RIGHT", 8, 0)
     local value = UI:Label(f, "0", "GameFontHighlight")
     value:SetJustifyH("CENTER")
     value:SetWidth(24)
     value:SetPoint("LEFT", minus, "RIGHT", 2, 0)
-    local plus = UI:Button(f, "+", 22, 20, onPlus)
+    local plus = UI:Button(f, "+", 22, 20, onPlus, SAVED_TIP)
     plus:SetPoint("LEFT", value, "RIGHT", 2, 0)
     return minus, value, plus
 end
@@ -183,7 +192,7 @@ local function create()
     raidLabel:SetPoint("TOPLEFT", 16, -56)
     f.raidButton = UI:Button(f, "", 200, 22, function(btn)
         UI:ShowRaidMenu(btn, Addon.session.raidKey, function(key) Reserves:LeaderSetRaid(key) end)
-    end, "Raid everyone reserves for")
+    end, "Raid everyone reserves for. Picking a raid loads the rules you saved for it.")
     f.raidButton:SetPoint("LEFT", raidLabel, "RIGHT", 8, 0)
     f.lockButton = UI:Button(f, "Lock reserves", 120, 22, function()
         Reserves:LeaderSetLocked(not Addon.session.locked)
@@ -191,26 +200,24 @@ local function create()
     f.lockButton:SetPoint("LEFT", f.raidButton, "RIGHT", 10, 0)
     f.lockState = UI:Label(f, nil, "GameFontHighlight")
     f.lockState:SetPoint("LEFT", f.lockButton, "RIGHT", 8, 0)
+    f.presetNote = UI:Label(f)
+    f.presetNote:SetPoint("TOPLEFT", 60, -82)
 
     -- Counts.
-    f.hardMinus, f.hardValue, f.hardPlus = counter(f, "Hard reserves:", 16, -88,
+    f.hardMinus, f.hardValue, f.hardPlus = counter(f, "Hard reserves:", 16, -102,
         function() setCounts(-1, 0) end, function() setCounts(1, 0) end)
-    f.softMinus, f.softValue, f.softPlus = counter(f, "Soft reserves:", 260, -88,
+    f.softMinus, f.softValue, f.softPlus = counter(f, "Soft reserves:", 260, -102,
         function() setCounts(0, -1) end, function() setCounts(0, 1) end)
 
     -- Options.
-    f.exclusive = UI:CheckButton(f, "Exclusive hard reserves", function(v)
-        Reserves:LeaderSetOption("exclusiveHardReserves", v)
-    end, "Only one player may hard reserve a given item.")
-    f.exclusive:SetPoint("TOPLEFT", 12, -112)
     f.double = UI:CheckButton(f, "Allow double soft reserve", function(v)
         Reserves:LeaderSetOption("allowDoubleSoft", v)
-    end, "A player may spend two soft reserves on the same item (two entries).")
-    f.double:SetPoint("TOPLEFT", 196, -112)
+    end, "A player may spend two soft reserves on the same item (two entries).\n" .. SAVED_TIP)
+    f.double:SetPoint("TOPLEFT", 12, -126)
     f.consume = UI:CheckButton(f, "Consume on award", function(v)
         Reserves:LeaderSetOption("consumeOnAward", v)
-    end, "Winning an item removes the winner's reserve on it.")
-    f.consume:SetPoint("TOPLEFT", 390, -112)
+    end, "Winning an item removes the winner's reserve on it.\n" .. SAVED_TIP)
+    f.consume:SetPoint("TOPLEFT", 236, -126)
 
     -- Actions.
     f.broadcast = UI:Button(f, "Broadcast", 100, 22, function()
@@ -218,7 +225,7 @@ local function create()
         ns.Comm:SendSync()
         Addon:Print("Settings and reserves broadcast to the raid.")
     end, "Re-send settings and the full reserve list to the raid.")
-    f.broadcast:SetPoint("TOPLEFT", 16, -144)
+    f.broadcast:SetPoint("TOPLEFT", 16, -158)
     f.export = UI:Button(f, "Export", 100, 22, function()
         UI:ShowText("Reserves export", Reserves:Export())
     end, "Plain-text list of all reserves (copy into Discord etc.).")
@@ -231,11 +238,11 @@ local function create()
     f.count:SetPoint("LEFT", f.reset, "RIGHT", 12, 0)
 
     -- Export works for everyone; the rest is leader-only.
-    f.leaderControls = { f.raidButton, f.lockButton, f.exclusive, f.double, f.consume, f.broadcast, f.reset }
+    f.leaderControls = { f.raidButton, f.lockButton, f.double, f.consume, f.broadcast, f.reset }
 
     -- Player table.
     local inset = UI:Inset(f)
-    inset:SetPoint("TOPLEFT", 12, -176)
+    inset:SetPoint("TOPLEFT", 12, -190)
     inset:SetPoint("BOTTOMRIGHT", -12, 12)
     f.list = UI:CreateScrollList(f, ROW_H, createRow, updateRow)
     f.list:SetPoint("TOPLEFT", inset, "TOPLEFT", 4, -4)

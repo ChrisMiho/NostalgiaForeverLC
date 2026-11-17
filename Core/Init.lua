@@ -19,7 +19,8 @@ Addon.COLOR = "|cff33ff99"
 -- Saved variables
 ---------------------------------------------------------------------------
 local DB_DEFAULTS = {
-    settings = Engine.DEFAULT_SETTINGS, -- leader's preferred settings
+    settings = Engine.DEFAULT_SETTINGS, -- leader's default rules (raids without a preset)
+    raidPresets = {},                   -- [raidKey] = leader's saved rules for that raid
     minLootQuality = 4,                 -- only track epic+ drops (restricted items always shown)
     announceChannel = "RAID_WARNING",   -- RAID_WARNING or RAID
     rollTimeout = 30,                   -- seconds; 0 = no auto-close
@@ -31,7 +32,8 @@ local DB_DEFAULTS = {
 
 local CHAR_DEFAULTS = {
     framePositions = {},
-    myReserves = {},                    -- { hard = {itemID}, soft = {itemID} } this character's picks
+    wishlists = {},                     -- [raidKey] = { hard = {itemID...}, soft = {itemID...} } in priority order
+    lastSeenRules = {},                 -- [raidKey] = last rules the raid leader used (for previews)
 }
 
 local function applyDefaults(target, defaults)
@@ -87,6 +89,8 @@ end
 --   ROLL_UPDATED(entry)        a roll was recorded (leader)
 --   ROLL_ENDED(entry, winner)  item awarded / roll ended
 --   RESERVE_REJECTED(itemID, kind, reason)
+--   SETTINGS_CHANGED(old, new, oldRaid, newRaid, oldLocked, newLocked)  leader's rules arrived/changed (members)
+--   RULES_NOTICE(text)         human-readable summary of a rules change (members)
 
 ---------------------------------------------------------------------------
 -- WoW API compatibility
@@ -203,6 +207,15 @@ Addon:RegisterEvent("ADDON_LOADED", function(self, _, name)
         self.session.locked = saved.locked or false
         self.session.raidKey = saved.raidKey
     end
+
+    -- Migrate pre-0.2 flat picks into the current raid's wishlist.
+    local old = self.charDB.myReserves
+    if old and self.session.raidKey and ((old.hard and #old.hard > 0) or (old.soft and #old.soft > 0)) then
+        if not self.charDB.wishlists[self.session.raidKey] then
+            self.charDB.wishlists[self.session.raidKey] = { hard = old.hard or {}, soft = old.soft or {} }
+        end
+    end
+    self.charDB.myReserves = nil
 
     for _, fn in ipairs(initQueue) do
         local ok, err = pcall(fn, self)

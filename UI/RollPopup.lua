@@ -26,6 +26,10 @@ local function modeText(r)
     if r.mode == MODE.RESTRICTED then
         return UI.Color(UI.MODE_COLORS.RESTRICTED, "Restricted (legendary+): the raid leader decides who gets it.")
     elseif r.mode == MODE.HARD then
+        if #names > 1 then
+            return UI.Color(UI.MODE_COLORS.HARD, "Hard reserved - only " .. list
+                .. " may roll. Soft reserves don't count.")
+        end
         return UI.Color(UI.MODE_COLORS.HARD, "Hard reserved" .. (#names > 0 and (" by " .. list) or "") .. ".")
     elseif r.mode == MODE.SOFT then
         return UI.Color(UI.MODE_COLORS.SOFT, "Soft reserved - only "

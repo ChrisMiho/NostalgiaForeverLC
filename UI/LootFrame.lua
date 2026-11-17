@@ -92,6 +92,9 @@ local function rollSummary(entry)
         return UI.Color(UI.MODE_COLORS.HARD, "Hard reserved by " .. d.eligible[1] .. " - no roll needed.")
     end
     local lines = { roll.open and UI.Color("40ff40", "Rolls open (/roll 1-100)") or UI.Color("ff9933", "Roll closed") }
+    if d.mode == MODE.HARD then
+        lines[#lines + 1] = UI.Color(UI.MODE_COLORS.HARD, "Multiple hard reserves - only they roll; soft reserves ignored.")
+    end
     local standings = roll:Standings()
     if #standings == 0 then lines[#lines + 1] = UI.Color(UI.GREY, "No rolls yet.") end
     for i, s in ipairs(standings) do

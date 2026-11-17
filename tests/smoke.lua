@@ -121,31 +121,121 @@ local function event(e, ...) Addon.frame._scripts.OnEvent(Addon.frame, e, ...) e
 event("ADDON_LOADED", "IDontWannaLC")
 Addon.session.raidKey = "MC"
 
--- Reserve window
+local function check(cond, msg)
+    if cond then
+        print("ok   " .. msg)
+    else
+        print("ERROR check failed: " .. msg)
+        G.ERRORS = (G.ERRORS or 0) + 1
+    end
+end
+local function has(text, needle) return type(text) == "string" and text:find(needle, 1, true) ~= nil end
+local function same(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do if a[i] ~= b[i] then return false end end
+    return true
+end
+local function plain(t) return (t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+
+-- Reserve window (as leader of MC; defaults 1 HR / 2 SR)
 UI:ToggleReserve(); runTimers()
 local rf = G.IDWLC_Reserve
 assert(rf:IsShown())
-ns.Reserves:Toggle(16800, "hard"); runTimers()
-ns.Reserves:Toggle(16829, "soft"); runTimers()
+local R = ns.Reserves
+local hardCol, softCol = rf.columns.hard, rf.columns.soft
+check(has(rf.raidNote._text, "Live raid"), "live raid note: " .. rf.raidNote._text)
+-- Lucifron: 16800 16829 16837 | 16859 16805 16863 ...
+local rows = rf.itemList.rows
+rows[1].hr:Click(); runTimers()
+rows[2].hr:Click(); runTimers()
+rows[3].hr:Click(); runTimers()
+rows[4].sr:Click("LeftButton"); runTimers()
+rows[5].sr:Click("LeftButton"); runTimers()
+rows[6].sr:Click("LeftButton"); runTimers()
+local w = R:GetWishlist("MC")
+check(same(w.hard, { 16800, 16829, 16837 }) and same(w.soft, { 16859, 16805, 16863 }), "tiers filled from item rows")
+check(has(rows[2].hr._text, "HR #2") and not has(rows[2].hr._text, "40ff40"), "row2 HR shows rank, standby: " .. rows[2].hr._text)
+check(has(rows[1].hr._text, "HR #1") and has(rows[1].hr._text, "40ff40"), "row1 HR active: " .. rows[1].hr._text)
+check(has(rows[5].sr._text, "SR #2"), "row5 SR rank: " .. rows[5].sr._text)
+local function colDump(col)
+    local out = {}
+    for _, r in ipairs(col.list.rows) do
+        if rawget(r, "data") then -- unused pooled rows fall through to the mock metatable
+            out[#out + 1] = r.data.divider and ("[" .. plain(r.divider._text) .. "]")
+                or (r.data.pos .. ":" .. r.item.itemID .. ":" .. plain(r.tag._text))
+        end
+    end
+    return table.concat(out, " ")
+end
+print("hard col", colDump(hardCol)); print("soft col", colDump(softCol))
+check(colDump(hardCol) == "1:16800:Active [-- 1 slot --] 2:16829:Standby 3:16837:Standby", "hard column active/standby + divider")
+check(colDump(softCol) == "1:16859:Active 2:16805:Active [-- 2 slots --] 3:16863:Standby", "soft column active/standby + divider")
+check(has(hardCol.header._text, "3 / 10"), "hard fill count: " .. hardCol.header._text)
+check(has(rf.status._text, "Molten Core: 1 HR / 2 SR per player") and has(rf.status._text, "3 active") and has(rf.status._text, "3 standby"),
+    "status line: " .. rf.status._text)
+check(hardCol.list.rows[1].up._enabled == false and hardCol.list.rows[4].down._enabled == false, "arrow ends disabled")
+-- Reorder: 16829 up to #1, then soft 16859 down to #2.
+hardCol.list.rows[3].up:Click(); runTimers()
+check(colDump(hardCol) == "1:16829:Active [-- 1 slot --] 2:16800:Standby 3:16837:Standby", "move up: " .. colDump(hardCol))
+softCol.list.rows[1].down:Click(); runTimers()
+check(same(R:GetWishlist("MC").soft, { 16805, 16859, 16863 }), "move down soft")
+check(same(Addon.session.reserves.Me.hard, { 16829 }), "leader's own selection sent after reorder")
+-- Leader changes counts: Active/Standby follow.
+R:LeaderSetCounts(2, 1); runTimers()
+print("hard col", colDump(hardCol)); print("soft col", colDump(softCol))
+check(colDump(hardCol) == "1:16829:Active 2:16800:Active [-- 2 slots --] 3:16837:Standby", "counts 2/1 hard column")
+check(colDump(softCol) == "1:16805:Active [-- 1 slot --] 2:16859:Standby 3:16863:Standby", "counts 2/1 soft column")
+check(has(rf.status._text, "2 HR / 1 SR"), "status after counts: " .. rf.status._text)
+check(R:HasPreset("MC"), "preset saved for MC")
+print("leader own reserves after count change", table.concat(Addon.session.reserves.Me.hard, ","))
+R:LeaderSetCounts(1, 2); runTimers()
+-- Remove from the soft tier (row 4 = 16863 after the divider).
+softCol.list.rows[4].remove:Click(); runTimers()
+check(same(R:GetWishlist("MC").soft, { 16805, 16859 }), "remove x on soft row")
+-- Other players' reserves are shown while browsing the live raid.
 Addon.session.reserves.Bob = { hard = { 16837 }, soft = { 16829, 16800 } }
 Addon:Fire("RESERVES_CHANGED"); runTimers()
--- click an item row HR on the list
-local row = rf.itemList.rows[2]
-print("row2 item", row.itemID, row.sub._text, row.hr._text, row.hr._enabled)
-row.sr:Click("LeftButton"); runTimers()
--- link box
+check(has(rows[1].sub._text, "Bob"), "others shown on live raid: " .. rows[1].sub._text)
+-- link box (browsing MC)
 rf.linkBox:SetFocus(); G.ChatEdit_InsertLink(select(2, G.GetItemInfo(19019))); runTimers()
 print("link item", rf.linkItem.itemID, rf.linkStatus._text, rf.linkHR._shown)
+check(rf.linkHR._shown == false and has(rf.linkStatus._text, "Restricted"), "restricted link item")
+
+-- Browse another raid and plan ahead.
 rf.raidButton:Click(); UI.menu.buttons[2]:Click(); runTimers()
 print("raid button", rf.raidButton._text, rf.raidNote._text)
-print("status", rf.status._text, rf.myLabel._text)
+check(has(rf.raidNote._text, "Planning ahead"), "planning note")
+local otherKey = ns.RaidDataAPI:GetChoices()[2].key
+rows[1].hr:Click(); runTimers()
+local firstOther = rows[1].itemID
+check(same(R:GetWishlist(otherKey).hard, { firstOther }), "pick added to browsed raid " .. otherKey)
+check(#R:GetWishlist("MC").hard == 3, "live raid list untouched")
+check(has(rows[1].hr._text, "HR #1") and not has(rows[1].sub._text, "Bob"), "browsed row: rank, no live names: " .. rows[1].sub._text)
+check(has(rf.panelTitle._text, ns.RaidDataAPI:GetName(otherKey)) and has(hardCol.header._text, "1 / 10"), "panel follows browsed raid")
+rf.linkBox:SetFocus(); G.ChatEdit_InsertLink(select(2, G.GetItemInfo(16800))); runTimers()
+rf.linkSR:Click("LeftButton"); runTimers()
+check(same(R:GetWishlist(otherKey).soft, { 16800 }) and has(rf.linkSR._text, "SR #1"), "link box adds to browsed raid soft tier")
+rf.clearBtn:Click(); runTimers()
+local ow = R:GetWishlist(otherKey)
+check(#ow.hard == 0 and #ow.soft == 0 and #R:GetWishlist("MC").hard == 3, "clear list (browsed raid only)")
+rows[2].hr:Click(); runTimers()
+check(#R:GetWishlist(otherKey).hard == 1, "pick re-added after clear")
+rf.raidButton:Click(); UI.menu.buttons[1]:Click(); runTimers()
+check(has(rf.raidNote._text, "Live raid"), "back to live raid")
+
+-- Rules notice: banner + window opens.
+rf:Hide()
+Addon:Fire("RULES_NOTICE", "test"); runTimers()
+check(rf:IsShown() and rf.banner:IsShown() and rf.banner.text._text == "test", "rules notice banner opens window")
+print("status", rf.status._text)
 Addon:Fire("RESERVE_REJECTED", 16800, "hard", "test reason"); runTimers()
 
 -- Leader window
 UI:ToggleLeader(); runTimers()
 local lf = G.IDWLC_Leader
-lf.hardPlus:Click(); lf.exclusive:SetChecked(false); lf.exclusive:Click(); lf.lockButton:Click(); runTimers()
-print("leader rows", #lf.list.rows, lf.hardValue._text, Addon.session.settings.exclusiveHardReserves, Addon.session.locked)
+check(has(lf.presetNote._text, "Saved rules for this raid"), "leader preset note: " .. lf.presetNote._text)
+lf.hardPlus:Click(); lf.double:SetChecked(true); lf.double:Click(); lf.lockButton:Click(); runTimers()
+print("leader rows", #lf.list.rows, lf.hardValue._text, Addon.session.settings.allowDoubleSoft, Addon.session.locked)
 lf.export:Click(); print("export:", G.IDWLC_TextDialog.text)
 lf.list.rows[2].remove:Click(); runTimers()
 lf.reset:Click(); runTimers()
@@ -188,5 +278,22 @@ ns.Loot:OnRemoteRoll(7, 16800, "HARD", "+"); runTimers()
 print("unknown popup", rp.status._text)
 UI:ToggleLeader(); UI:ToggleLeader(); runTimers()
 print("leader banner", lf.banner._text)
+
+-- Member receives new rules from the leader (Bob) via the Comm path.
+rf.banner:Hide(); rf:Hide()
+local function cfg(h, so, locked)
+    event("CHAT_MSG_ADDON", "IDWLC", ("CFG^%d,%d,5,0,1,%d,MC"):format(h, so, locked and 1 or 0), "RAID", "Bob"); runTimers()
+end
+cfg(3, 1, false)
+print("member banner", rf.banner.text._text)
+check(rf:IsShown() and rf.banner:IsShown() and has(rf.banner.text._text, "Raid leader updated reserve rules"), "member CFG -> banner")
+check(has(rf.status._text, "3 HR / 1 SR"), "member status: " .. rf.status._text)
+print("member hard col", colDump(hardCol))
+check(Addon.charDB.lastSeenRules.MC and Addon.charDB.lastSeenRules.MC.hardReserves == 3, "last seen rules stored")
+cfg(3, 1, true)
+check(rf.itemList.rows[1].hr._enabled == false and has(rf.raidNote._text, "Locked"), "locked: buttons disabled, note")
+cfg(3, 1, false)
+Addon:Fire("SETTINGS_CHANGED", { hardReserves = 3, softReserves = 1 }, { hardReserves = 1, softReserves = 2 }, "MC", "MC", false, false); runTimers()
+check(has(rf.banner.text._text, "Hard reserves 3 -> 1"), "SETTINGS_CHANGED diff banner: " .. rf.banner.text._text)
 print("ERRORS", G.ERRORS or 0)
 for _, c in ipairs(chat) do print(c) end

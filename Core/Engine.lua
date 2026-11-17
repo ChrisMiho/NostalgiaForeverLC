@@ -29,8 +29,7 @@ Engine.DEFAULT_SETTINGS = {
     hardReserves = 1,              -- hard reserves per player
     softReserves = 2,              -- soft reserves per player
     restrictedMinQuality = 5,      -- legendary and above are restricted
-    exclusiveHardReserves = true,  -- only one player may hard reserve an item
-    allowDoubleSoft = false,       -- may a player spend 2 SRs on the same item
+    allowDoubleSoft = false,      -- may a player spend 2 SRs on the same item
     consumeOnAward = true,         -- winning an item removes that reserve
 }
 
@@ -111,16 +110,6 @@ function Session:Remaining(player)
     return self.settings.hardReserves - usedH, self.settings.softReserves - usedS
 end
 
--- Who (other than `player`) already hard reserved itemID?
-function Session:HardHolder(itemID, exceptPlayer)
-    for name, r in pairs(self.reserves) do
-        if name ~= exceptPlayer and contains(r.hard, itemID) then
-            return name
-        end
-    end
-    return nil
-end
-
 -- Validate a reserve without applying it. Returns ok, errorMessage.
 -- `quality` may be nil if unknown (item not cached); restriction is then
 -- re-checked when the item actually drops.
@@ -143,11 +132,9 @@ function Session:CanReserve(player, itemID, kind, quality, ignoreLock)
         return false, ("no %s reserves left (%d max)"):format(kind, limit)
     end
     if kind == Engine.KIND.HARD then
+        -- Several players may hard reserve the same item; they roll among
+        -- themselves when it drops and soft reserves on it are ignored.
         if contains(r.hard, itemID) then return false, "already hard reserved" end
-        if self.settings.exclusiveHardReserves then
-            local holder = self:HardHolder(itemID, player)
-            if holder then return false, "already hard reserved by " .. holder end
-        end
     else
         if contains(r.hard, itemID) then return false, "already hard reserved by you" end
         if contains(r.soft, itemID) and not self.settings.allowDoubleSoft then
@@ -226,6 +213,8 @@ function Session:Resolve(itemID, quality)
         return decision
     end
 
+    -- Any hard reserve takes precedence: soft reservers are shut out and only
+    -- the hard reservers roll (a single hard reserver gets it without a roll).
     if #hard > 0 then
         decision.mode = Engine.MODE.HARD
         decision.eligible = hard
@@ -264,6 +253,75 @@ function Session:RecordAward(itemID, player, mode, timestamp)
             end
         end
     end
+end
+
+---------------------------------------------------------------------------
+-- Tiered wishlists
+-- Players keep an ordered priority list of hard and soft picks per raid
+-- (longer than the slots they may get). When they join a raid, the top
+-- N entries that fit the raid leader's slot counts become their reserves;
+-- the rest wait on standby and move up if slots open.
+---------------------------------------------------------------------------
+Engine.MAX_WISHLIST = 10 -- entries per list (hard / soft) per raid
+
+-- wish = { hard = {itemID...}, soft = {itemID...} } in priority order.
+-- Returns selectedHard, selectedSoft, standbyHard, standbySoft.
+-- Restricted items (when quality is known) and duplicates are skipped; an
+-- item already selected as a hard reserve is never also used as a soft one.
+function Engine.SelectFromWishlist(wish, settings, qualityLookup)
+    local hard, soft, standbyH, standbyS = {}, {}, {}, {}
+    local minQ = settings.restrictedMinQuality or Engine.DEFAULT_SETTINGS.restrictedMinQuality
+    local function restricted(id)
+        local q = qualityLookup and qualityLookup(id) or nil
+        return q ~= nil and q >= minQ
+    end
+    local inHard = {}
+    for _, id in ipairs(wish and wish.hard or {}) do
+        if not restricted(id) and not inHard[id] then
+            if #hard < (settings.hardReserves or 0) then
+                hard[#hard + 1] = id
+                inHard[id] = true
+            else
+                standbyH[#standbyH + 1] = id
+            end
+        end
+    end
+    local softCount = {}
+    for _, id in ipairs(wish and wish.soft or {}) do
+        local dupOk = settings.allowDoubleSoft and (softCount[id] or 0) < 2
+        if not restricted(id) and not inHard[id] and (not softCount[id] or dupOk) then
+            if #soft < (settings.softReserves or 0) then
+                soft[#soft + 1] = id
+                softCount[id] = (softCount[id] or 0) + 1
+            else
+                standbyS[#standbyS + 1] = id
+            end
+        end
+    end
+    return hard, soft, standbyH, standbyS
+end
+
+-- Human-readable list of what changed between two settings tables.
+function Engine.DiffSettings(old, new)
+    local out = {}
+    local function num(key, label)
+        if (old[key] or 0) ~= (new[key] or 0) then
+            out[#out + 1] = ("%s %d -> %d"):format(label, old[key] or 0, new[key] or 0)
+        end
+    end
+    local function flag(key, label)
+        if (old[key] and true or false) ~= (new[key] and true or false) then
+            out[#out + 1] = ("%s %s"):format(label, new[key] and "on" or "off")
+        end
+    end
+    num("hardReserves", "Hard reserves")
+    num("softReserves", "Soft reserves")
+    flag("allowDoubleSoft", "Double soft reserve")
+    flag("consumeOnAward", "Consume on award")
+    if (old.restrictedMinQuality or 5) ~= (new.restrictedMinQuality or 5) then
+        out[#out + 1] = "Restricted quality changed"
+    end
+    return out
 end
 
 ---------------------------------------------------------------------------
@@ -428,7 +486,6 @@ function Engine.EncodeSettings(settings, locked, raidKey)
         settings.hardReserves,
         settings.softReserves,
         settings.restrictedMinQuality,
-        settings.exclusiveHardReserves and 1 or 0,
         settings.allowDoubleSoft and 1 or 0,
         settings.consumeOnAward and 1 or 0,
         locked and 1 or 0,
@@ -439,17 +496,16 @@ end
 function Engine.DecodeSettings(str)
     local parts = {}
     for p in ((str or "") .. ","):gmatch("([^,]*),") do table.insert(parts, p) end
-    if #parts < 7 then return nil end
+    if #parts < 6 then return nil end
     local settings = {
         hardReserves = tonumber(parts[1]) or 0,
         softReserves = tonumber(parts[2]) or 0,
         restrictedMinQuality = tonumber(parts[3]) or 5,
-        exclusiveHardReserves = parts[4] == "1",
-        allowDoubleSoft = parts[5] == "1",
-        consumeOnAward = parts[6] == "1",
+        allowDoubleSoft = parts[4] == "1",
+        consumeOnAward = parts[5] == "1",
     }
-    local locked = parts[7] == "1"
-    local raidKey = parts[8] ~= "" and parts[8] or nil
+    local locked = parts[6] == "1"
+    local raidKey = parts[7] ~= "" and parts[7] or nil
     return settings, locked, raidKey
 end
 

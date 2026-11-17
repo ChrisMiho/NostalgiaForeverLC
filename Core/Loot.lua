@@ -177,7 +177,11 @@ local function describe(decision)
     if decision.mode == MODE.RESTRICTED then
         return "RESTRICTED - raid leader decides"
     elseif decision.mode == MODE.HARD then
-        return "HARD RESERVED by " .. table.concat(decision.eligible, ", ")
+        if #decision.eligible == 1 then
+            return "HARD RESERVED by " .. decision.eligible[1]
+        end
+        return "HARD RESERVED - only " .. table.concat(decision.eligible, ", ")
+            .. " may /roll (soft reserves don't count)"
     elseif decision.mode == MODE.SOFT then
         return "SOFT RESERVED - only " .. table.concat(decision.eligible, ", ") .. " may /roll"
     end
@@ -364,11 +368,13 @@ Addon:RegisterEvent("GET_ITEM_INFO_RECEIVED", function()
     end
 end)
 
--- Set the session raid automatically when the leader zones into a raid.
+-- Set the session raid automatically when the leader zones into a raid
+-- (loads the leader's saved preset for it). Never switches once locked.
 Addon:RegisterEvent("PLAYER_ENTERING_WORLD", function(self)
     if not self:IsLeader() or not self:IsInRaidInstance() then return end
     local key = ns.RaidDataAPI:Detect()
-    if key and key ~= self.session.raidKey and not self.session.raidKey then
+    if key and key ~= self.session.raidKey and not self.session.locked then
         ns.Reserves:LeaderSetRaid(key)
+        self:Print("Raid set to %s (your saved rules for it were applied).", ns.RaidDataAPI:GetName(key))
     end
 end)

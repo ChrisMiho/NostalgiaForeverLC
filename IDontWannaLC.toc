@@ -2,7 +2,7 @@
 ## Title: I Don't Wanna LC
 ## Notes: Hard & soft reserve loot rules for raids. Legendary+ items are restricted; the raid leader always hands out loot.
 ## Author: ChrisMiho
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: IDontWannaLCDB
 ## SavedVariablesPerCharacter: IDontWannaLCCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Dice_02

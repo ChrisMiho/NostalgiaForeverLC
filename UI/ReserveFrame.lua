@@ -1,23 +1,48 @@
 -- IDontWannaLC - Reserve window (every raider)
--- Browse a raid's loot by boss, toggle hard / soft reserves, reserve any
--- item by shift-clicking its link (WoW Forever loot tables start empty) and
--- review / remove your own picks.
+-- Browse any raid's loot catalogue by boss and build a tiered priority list
+-- for it (hard tier / soft tier), ahead of time if you like. In the raid the
+-- leader has picked, your top picks that fit the slot counts are sent
+-- automatically and the rest wait on standby. Shift-click any item link to
+-- add it (WoW Forever loot tables start empty); reorder / remove picks in the
+-- priority panel at the bottom.
 
 local _, ns = ...
 local Addon, Engine, UI = ns.Addon, ns.Engine, ns.UI
 local Reserves, RaidData = ns.Reserves, ns.RaidDataAPI
 local HARD, SOFT = Engine.KIND.HARD, Engine.KIND.SOFT
 
-local WIDTH, HEIGHT = 680, 560
-local ITEM_ROW_H, BOSS_ROW_H = 38, 20
-local CHIPS_PER_ROW, CHIP_ROWS, CHIP_W = 4, 2, 160
-local EMPTY_TEXT = "No loot known for this raid yet - items are learned as they drop.\nShift-click an item link to reserve it."
+local WIDTH, HEIGHT = 820, 700
+local ITEM_ROW_H, BOSS_ROW_H, PICK_ROW_H = 38, 20, 18
+local PICK_ROWS_VISIBLE = 9
+local PICK_BUTTON_W = 60
+local BANNER_SECONDS = 15
+local ACTIVE_COLOR, STANDBY_COLOR, LOCKED_COLOR = "40ff40", "a0a0a0", "ff4040"
+local EMPTY_TEXT = "No loot known for this raid yet - items are learned as they drop.\nShift-click an item link to add it to your list."
 
 local frame
 local viewKey          -- raid being browsed; nil = follow the raid leader's pick
 local followedKey      -- leader raid key at the time viewKey was chosen
 local selectedBoss = 1
 local linkItemID, linkItemLink
+local view             -- snapshot of the browsed raid's lists, rebuilt every refresh
+local bannerTimer
+local pendingClearKey  -- raid whose list the "Clear list" popup will clear
+local pendingNotice    -- rules notice that arrived during a boss encounter
+
+StaticPopupDialogs["IDWLC_CLEAR_WISHLIST"] = {
+    text = "I Don't Wanna LC:\nClear your whole priority list (hard and soft tiers) for %s?",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function()
+        if pendingClearKey then Reserves:ClearWishlist(pendingClearKey) end
+        pendingClearKey = nil
+    end,
+    OnCancel = function() pendingClearKey = nil end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 ---------------------------------------------------------------------------
 -- State helpers
@@ -32,60 +57,128 @@ local function currentKey()
     return first and first.key
 end
 
-local function countOf(list, id)
-    local n = 0
-    for _, v in ipairs(list) do if v == id then n = n + 1 end end
-    return n
+local function plural(n, word)
+    return ("%d %s%s"):format(n, word, n == 1 and "" or "s")
 end
 
--- Everything a row needs to know about one item from my point of view.
+-- Per position of a tier: "active", "standby" or "skipped" (restricted or a
+-- duplicate). selected / standby are in-order subsequences of the list.
+local function tierStatus(list, selected, standby)
+    local out, si, bi, lastActive = {}, 1, 1, 0
+    for i, id in ipairs(list) do
+        if selected[si] == id then
+            out[i], si, lastActive = "active", si + 1, i
+        elseif standby[bi] == id then
+            out[i], bi = "standby", bi + 1
+        else
+            out[i] = "skipped"
+        end
+    end
+    return out, lastActive
+end
+
+local function buildView(key)
+    local wish = Reserves:GetWishlist(key)
+    local settings = Reserves:SettingsFor(key)
+    local selH, selS, sbH, sbS = Reserves:GetSelection(key)
+    local live = key ~= nil and key == Addon.session.raidKey
+    local v = {
+        key = key, settings = settings, live = live,
+        nActive = #selH + #selS, nStandby = #sbH + #sbS,
+        editable = not (live and Addon.session.locked and IsInRaid()),
+        tiers = {},
+    }
+    local function tier(kind, list, sel, sb, slots)
+        local status, lastActive = tierStatus(list, sel, sb)
+        local first, count = {}, {}
+        for i, id in ipairs(list) do
+            if not first[id] then first[id] = i end
+            count[id] = (count[id] or 0) + 1
+        end
+        v.tiers[kind] = {
+            list = list, status = status, lastActive = lastActive, first = first, count = count,
+            slots = slots or 0, nActive = #sel,
+        }
+    end
+    tier(HARD, wish.hard, selH, sbH, settings.hardReserves)
+    tier(SOFT, wish.soft, selS, sbS, settings.softReserves)
+    return v
+end
+
+-- Everything an item row needs to know about one item from my point of view.
 local function itemState(itemID)
     local s = Addon.session
     local me = Addon:PlayerName()
-    local myHard, mySoft = Reserves:GetMine()
     local _, _, quality = UI.ItemInfo(itemID)
+    local h, so = view.tiers[HARD], view.tiers[SOFT]
     local st = {
         restricted = s:IsRestricted(quality),
-        myHR = countOf(myHard, itemID) > 0,
-        mySR = countOf(mySoft, itemID),
+        hardRank = h.first[itemID],
+        softRank = so.first[itemID],
+        softCount = so.count[itemID] or 0,
         otherHard = {}, otherSoft = {},
     }
-    local hard, soft = s:GetReservers(itemID)
-    for _, n in ipairs(hard) do
-        if n ~= me then st.otherHard[#st.otherHard + 1] = n end
-    end
-    local counts, order = {}, {}
-    for _, n in ipairs(soft) do
-        if n ~= me then
-            if not counts[n] then order[#order + 1] = n end
-            counts[n] = (counts[n] or 0) + 1
+    st.hardActive = st.hardRank ~= nil and h.status[st.hardRank] == "active"
+    st.softActive = st.softRank ~= nil and so.status[st.softRank] == "active"
+    -- Other players' reserves only exist for the raid the leader is running.
+    if view.live then
+        local hard, soft = s:GetReservers(itemID)
+        for _, n in ipairs(hard) do
+            if n ~= me then st.otherHard[#st.otherHard + 1] = n end
+        end
+        local counts, order = {}, {}
+        for _, n in ipairs(soft) do
+            if n ~= me then
+                if not counts[n] then order[#order + 1] = n end
+                counts[n] = (counts[n] or 0) + 1
+            end
+        end
+        for _, n in ipairs(order) do
+            st.otherSoft[#st.otherSoft + 1] = counts[n] > 1 and (n .. " x" .. counts[n]) or n
         end
     end
-    for _, n in ipairs(order) do
-        st.otherSoft[#st.otherSoft + 1] = counts[n] > 1 and (n .. " x" .. counts[n]) or n
-    end
-    st.hrBlocked = s.settings.exclusiveHardReserves and #st.otherHard > 0
     return st
 end
 
-local function reserversText(st)
-    local parts = {}
-    if #st.otherHard > 0 then
-        parts[#parts + 1] = UI.Color(UI.HARD_COLOR, "HR: " .. table.concat(st.otherHard, ", "))
+local function subText(st)
+    if view.live then
+        local parts = {}
+        if #st.otherHard > 0 then
+            parts[#parts + 1] = UI.Color(UI.HARD_COLOR, "HR: " .. table.concat(st.otherHard, ", "))
+        end
+        if #st.otherSoft > 0 then
+            parts[#parts + 1] = UI.Color(UI.SOFT_COLOR, "SR: " .. table.concat(st.otherSoft, ", "))
+        end
+        if #parts == 0 then return UI.Color(UI.GREY, "no other reserves") end
+        return table.concat(parts, "   ")
     end
-    if #st.otherSoft > 0 then
-        parts[#parts + 1] = UI.Color(UI.SOFT_COLOR, "SR: " .. table.concat(st.otherSoft, ", "))
+    if st.hardRank then
+        return UI.Color(UI.GREY, ("In your hard tier (#%d)"):format(st.hardRank))
+    elseif st.softRank then
+        return UI.Color(UI.GREY, ("In your soft tier (#%d)"):format(st.softRank))
     end
-    if #parts == 0 then return UI.Color(UI.GREY, "no other reserves") end
-    return table.concat(parts, "   ")
+    return ""
+end
+
+-- HR / SR button: "HR #2" green when the pick is active, grey on standby.
+local function setPickButton(btn, label, rank, active, enabled)
+    if rank then
+        btn:SetText(UI.Color(active and ACTIVE_COLOR or STANDBY_COLOR, ("%s #%d"):format(label, rank)))
+        btn:LockHighlight()
+    else
+        btn:SetText(label)
+        btn:UnlockHighlight()
+    end
+    btn:SetEnabled(enabled and true or false)
 end
 
 -- Left click toggles; right click adds an extra SR when double SR is allowed.
 local function softClick(itemID, button)
-    if button == "RightButton" and Addon.session.settings.allowDoubleSoft then
-        Reserves:Add(itemID, SOFT)
+    local key = currentKey()
+    if button == "RightButton" and Reserves:SettingsFor(key).allowDoubleSoft then
+        Reserves:Add(itemID, SOFT, key)
     else
-        Reserves:Toggle(itemID, SOFT)
+        Reserves:Toggle(itemID, SOFT, key)
     end
 end
 
@@ -101,36 +194,63 @@ local function applyButtons(hr, sr, status, st)
     status:Hide()
     hr:Show()
     sr:Show()
-    local open = not Addon.session.locked
-    UI.SetToggleState(hr, "HR", st.myHR, open and (st.myHR or not st.hrBlocked))
-    UI.SetToggleState(sr, st.mySR > 1 and ("SRx" .. st.mySR) or "SR", st.mySR > 0, open)
+    setPickButton(hr, "HR", st.hardRank, st.hardActive, view.editable)
+    setPickButton(sr, st.softCount > 1 and ("SRx" .. st.softCount) or "SR", st.softRank, st.softActive, view.editable)
+end
+
+local function rankTooltip(kind, getItemID)
+    return function()
+        local t = kind == HARD
+            and "Hard tier: beats every soft reserve. If several players hard reserve an item, only they roll."
+            or "Soft tier: you roll against other soft reservers."
+        local id = getItemID()
+        local tier = view and view.tiers[kind]
+        local rank = id and tier and tier.first[id]
+        if rank then
+            local active = tier.status[rank] == "active"
+            t = t .. ("\n\n#%d in your %s tier - %s.\nClick to remove it."):format(rank, kind,
+                active and "|cff40ff40active (sent to the leader)|r" or "|cffa0a0a0standby (no free slot)|r")
+        else
+            t = t .. "\n\nClick to add it to the end of your " .. kind .. " tier for the raid you are browsing."
+        end
+        if kind == SOFT and view and view.settings.allowDoubleSoft then
+            t = t .. "\nRight-click to add another SR (extra entry)."
+        end
+        return t
+    end
 end
 
 local function addReserveButtons(parent, getItemID)
-    local sr = UI:Button(parent, "SR", 44, 20, nil, function()
-        local t = "Soft reserve: you roll against other soft reservers."
-        if Addon.session.settings.allowDoubleSoft then t = t .. "\nRight-click to add another SR (extra entry)." end
-        return t
-    end)
+    local sr = UI:Button(parent, "SR", PICK_BUTTON_W, 20, nil, rankTooltip(SOFT, getItemID))
     sr:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     sr:SetScript("OnClick", function(_, button)
         local id = getItemID()
         if id then softClick(id, button) end
     end)
-    local hr = UI:Button(parent, "HR", 44, 20, function()
+    local hr = UI:Button(parent, "HR", PICK_BUTTON_W, 20, function()
         local id = getItemID()
-        if id then Reserves:Toggle(id, HARD) end
-    end, function()
-        return Addon.session.settings.exclusiveHardReserves
-            and "Hard reserve: the item is yours (only one player may hard reserve it)."
-            or "Hard reserve: hard reservers get the item (roll among them)."
-    end)
+        if id then Reserves:Toggle(id, HARD, currentKey()) end
+    end, rankTooltip(HARD, getItemID))
     local status = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     return hr, sr, status
 end
 
+-- Small arrow button using the stock scroll-bar arrow textures.
+local function arrowButton(parent, dir, onClick, tooltip)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(18, 18)
+    local base = "Interface\\Buttons\\UI-ScrollBar-Scroll" .. dir .. "Button-"
+    b:SetNormalTexture(base .. "Up")
+    b:SetPushedTexture(base .. "Down")
+    b:SetDisabledTexture(base .. "Disabled")
+    b:SetHighlightTexture(base .. "Highlight", "ADD")
+    b:SetScript("OnClick", onClick)
+    if tooltip then UI.SetTooltip(b, tooltip) end
+    return b
+end
+
 ---------------------------------------------------------------------------
--- Rows
+-- Catalogue rows
 ---------------------------------------------------------------------------
 local function createBossRow(parent)
     local b = CreateFrame("Button", nil, parent)
@@ -156,15 +276,16 @@ end
 
 local function createItemRow(parent)
     local row = CreateFrame("Frame", nil, parent)
+    local buttonsW = PICK_BUTTON_W * 2 + 16
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints()
     row.bg:SetColorTexture(1, 1, 1, 0.04)
     row.item = UI:CreateItemButton(row, 20)
     row.item:SetPoint("TOPLEFT", 4, -2)
-    row.item:SetPoint("RIGHT", row, "RIGHT", -104, 0)
+    row.item:SetPoint("TOPRIGHT", row, "TOPRIGHT", -buttonsW, -2)
     row.sub = UI:Label(row)
     row.sub:SetPoint("TOPLEFT", 28, -24)
-    row.sub:SetPoint("RIGHT", row, "RIGHT", -104, 0)
+    row.sub:SetPoint("TOPRIGHT", row, "TOPRIGHT", -buttonsW, -24)
     row.sub:SetWordWrap(false)
     row.hr, row.sr, row.status = addReserveButtons(row, function() return row.itemID end)
     row.sr:SetPoint("RIGHT", -4, 0)
@@ -178,56 +299,127 @@ local function updateItemRow(row, itemID, index)
     row.bg:SetShown(index % 2 == 0)
     row.item:SetItem(itemID)
     local st = itemState(itemID)
-    row.sub:SetText(reserversText(st))
+    row.sub:SetText(subText(st))
     applyButtons(row.hr, row.sr, row.status, st)
 end
 
 ---------------------------------------------------------------------------
--- "My reserves" chips
+-- "My priority list" panel: one ordered column per tier
 ---------------------------------------------------------------------------
-local function createChip(parent)
-    local c = CreateFrame("Frame", nil, parent)
-    c:SetSize(CHIP_W - 6, 20)
-    c.tag = UI:Label(c, nil, "GameFontNormalSmall")
-    c.tag:SetPoint("LEFT", 0, 0)
-    c.tag:SetWidth(22)
-    c.remove = UI:Button(c, "x", 20, 18, function()
-        Reserves:Remove(c.itemID, c.kind)
-    end, "Remove this reserve")
-    c.remove:SetPoint("RIGHT", 0, 0)
-    c.item = UI:CreateItemButton(c, 16)
-    c.item:SetPoint("LEFT", c.tag, "RIGHT", 0, 0)
-    c.item:SetPoint("RIGHT", c.remove, "LEFT", -2, 0)
-    c.item.text:SetFontObject(GameFontHighlightSmall)
-    return c
+local function createPickRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row.rank = UI:Label(row, nil, "GameFontNormalSmall")
+    row.rank:SetPoint("LEFT", 0, 0)
+    row.rank:SetWidth(20)
+    row.rank:SetJustifyH("RIGHT")
+    row.remove = UI:Button(row, "x", 20, 16, function()
+        local d = row.data
+        if d and d.id then Reserves:Remove(d.id, d.kind, currentKey()) end
+    end, "Remove from this list")
+    row.remove:SetPoint("RIGHT", -2, 0)
+    row.down = arrowButton(row, "Down", function()
+        local d = row.data
+        if d and d.id then Reserves:Move(d.id, d.kind, 1, currentKey()) end
+    end, "Move down (lower priority)")
+    row.down:SetPoint("RIGHT", row.remove, "LEFT", -2, 0)
+    row.up = arrowButton(row, "Up", function()
+        local d = row.data
+        if d and d.id then Reserves:Move(d.id, d.kind, -1, currentKey()) end
+    end, "Move up (higher priority)")
+    row.up:SetPoint("RIGHT", row.down, "LEFT", 0, 0)
+    row.tag = UI:Label(row, nil, "GameFontNormalSmall")
+    row.tag:SetPoint("RIGHT", row.up, "LEFT", -4, 0)
+    row.tag:SetWidth(58)
+    row.tag:SetJustifyH("RIGHT")
+    row.item = UI:CreateItemButton(row, 16)
+    row.item:SetPoint("LEFT", row.rank, "RIGHT", 4, 0)
+    row.item:SetPoint("RIGHT", row.tag, "LEFT", -4, 0)
+    row.item.text:SetFontObject(GameFontHighlightSmall)
+
+    -- Divider after the last active pick: "-- 2 slots --" between two lines.
+    row.divider = UI:Label(row, nil, "GameFontNormalSmall")
+    row.divider:SetPoint("CENTER")
+    row.divider:SetJustifyH("CENTER")
+    row.lineL = row:CreateTexture(nil, "ARTWORK")
+    row.lineL:SetHeight(1)
+    row.lineL:SetPoint("LEFT", 4, 0)
+    row.lineL:SetPoint("RIGHT", row.divider, "LEFT", -6, 0)
+    row.lineL:SetColorTexture(0.25, 1, 0.25, 0.5)
+    row.lineR = row:CreateTexture(nil, "ARTWORK")
+    row.lineR:SetHeight(1)
+    row.lineR:SetPoint("LEFT", row.divider, "RIGHT", 6, 0)
+    row.lineR:SetPoint("RIGHT", -4, 0)
+    row.lineR:SetColorTexture(0.25, 1, 0.25, 0.5)
+    return row
 end
 
-local function updateChips()
-    local myHard, mySoft = Reserves:GetMine()
-    local list = {}
-    for _, id in ipairs(myHard) do list[#list + 1] = { id = id, kind = HARD } end
-    for _, id in ipairs(mySoft) do list[#list + 1] = { id = id, kind = SOFT } end
-    local max = CHIPS_PER_ROW * CHIP_ROWS
-    for i = 1, max do
-        local c = frame.chips[i]
-        local e = list[i]
-        if e then
-            c.itemID, c.kind = e.id, e.kind
-            c.tag:SetText(e.kind == HARD and UI.Color(UI.HARD_COLOR, "HR") or UI.Color(UI.SOFT_COLOR, "SR"))
-            c.item:SetItem(e.id)
-            c.remove:SetEnabled(not Addon.session.locked)
-            c:Show()
-        else
-            c:Hide()
-        end
+local function statusTag(d)
+    if d.status == "active" then return UI.Color(ACTIVE_COLOR, "Active") end
+    if d.status == "standby" then return UI.Color(STANDBY_COLOR, "Standby") end
+    local q = Addon:GetItemQuality(d.id)
+    local minQ = view.settings.restrictedMinQuality or Engine.DEFAULT_SETTINGS.restrictedMinQuality
+    if q and q >= minQ then return UI.Color(UI.MODE_COLORS.RESTRICTED, "Restricted") end
+    return UI.Color(UI.GREY, "Duplicate")
+end
+
+local function updatePickRow(row, d)
+    local isDivider = d.divider and true or false
+    row.divider:SetShown(isDivider)
+    row.lineL:SetShown(isDivider)
+    row.lineR:SetShown(isDivider)
+    row.rank:SetShown(not isDivider)
+    row.item:SetShown(not isDivider)
+    row.tag:SetShown(not isDivider)
+    row.up:SetShown(not isDivider)
+    row.down:SetShown(not isDivider)
+    row.remove:SetShown(not isDivider)
+    if isDivider then
+        row.divider:SetText(d.text)
+        return
     end
-    local label = "My reserves:"
-    if #list == 0 then
-        label = label .. UI.Color(UI.GREY, "  none yet")
-    elseif #list > max then
-        label = label .. UI.Color(UI.GREY, ("  (+%d more - see /idwlc status)"):format(#list - max))
+    row.rank:SetText(d.pos .. ".")
+    row.item:SetItem(d.id)
+    row.tag:SetText(statusTag(d))
+    -- Move / Remove act on an item's first entry, so arrows are only offered
+    -- there (a second entry only exists with double soft reserve).
+    local canEdit = view.editable
+    row.up:SetEnabled(canEdit and d.first and d.pos > 1)
+    row.down:SetEnabled(canEdit and d.first and not d.last)
+    row.remove:SetEnabled(canEdit)
+end
+
+local function pickData(kind)
+    local t = view.tiers[kind]
+    local data = {}
+    if #t.list == 0 then return data end
+    local function divider()
+        local free = t.slots - t.nActive
+        local text = "-- " .. plural(t.slots, "slot")
+        if free > 0 then text = text .. (", %d free"):format(free) end
+        data[#data + 1] = { divider = true, text = UI.Color(ACTIVE_COLOR, text .. " --") }
     end
-    frame.myLabel:SetText(label)
+    if t.lastActive == 0 then divider() end
+    for i, id in ipairs(t.list) do
+        data[#data + 1] = {
+            id = id, kind = kind, pos = i, status = t.status[i],
+            first = t.first[id] == i, last = i == #t.list,
+        }
+        if i == t.lastActive then divider() end
+    end
+    return data
+end
+
+local function updatePanel(f)
+    f.panelTitle:SetText("My priority list - " .. (view.key and RaidData:GetName(view.key) or "no raid"))
+    for _, kind in ipairs({ HARD, SOFT }) do
+        local col, t = f.columns[kind], view.tiers[kind]
+        col.header:SetText(col.title .. "   " .. UI.Color(UI.GREY, ("%d / %d"):format(#t.list, Engine.MAX_WISHLIST)))
+        col.info:SetText(("%s, %s active"):format(plural(t.slots, "slot"), UI.Color(ACTIVE_COLOR, t.nActive)))
+        col.list:SetData(pickData(kind))
+        col.empty:SetShown(#t.list == 0)
+    end
+    local total = #view.tiers[HARD].list + #view.tiers[SOFT].list
+    f.clearBtn:SetEnabled(view.editable and view.key ~= nil and total > 0)
 end
 
 ---------------------------------------------------------------------------
@@ -236,26 +428,38 @@ end
 local function refresh(self)
     local s = Addon.session
     local key = currentKey()
+    view = buildView(key)
 
-    -- Header: raid + lock + remaining.
-    self.raidButton:SetText(RaidData:GetName(key))
-    local note
-    if s.raidKey and key ~= s.raidKey then
-        note = "Browsing - the raid leader picked " .. RaidData:GetName(s.raidKey) .. "."
-    elseif s.raidKey then
-        note = "Raid leader's pick."
+    -- Header: browsed raid, live rules, my picks.
+    self.raidButton:SetText(key and RaidData:GetName(key) or "(choose raid)")
+    local status
+    if s.raidKey then
+        status = ("%s: %d HR / %d SR per player - %s"):format(RaidData:GetName(s.raidKey),
+            s.settings.hardReserves, s.settings.softReserves,
+            s.locked and UI.Color(LOCKED_COLOR, "LOCKED") or UI.Color(ACTIVE_COLOR, "Open"))
     else
-        note = "No raid set by the raid leader yet."
+        status = UI.Color(UI.GREY, "No raid set by the raid leader yet")
     end
-    if not IsInRaid() then
-        note = note .. "  Not in a raid: your picks are kept and sent to the leader when you join."
+    self.status:SetText(("%s     Your picks: %s, %s"):format(status,
+        UI.Color(ACTIVE_COLOR, view.nActive .. " active"), UI.Color(STANDBY_COLOR, view.nStandby .. " standby")))
+
+    local note
+    local set = view.settings
+    if view.live then
+        if not view.editable then
+            note = UI.Color(LOCKED_COLOR, "Locked by the raid leader") .. " - this raid's list can't be changed right now."
+        else
+            note = UI.Color(ACTIVE_COLOR, "Live raid:") .. (" your top %d hard / %d soft picks are sent to the raid leader; the rest wait on standby.")
+                :format(set.hardReserves, set.softReserves)
+            if not IsInRaid() then note = note .. " Sent when you join the raid." end
+        end
+    else
+        local seen = key and Addon.charDB.lastSeenRules[key]
+        note = UI.Color(UI.SOFT_COLOR, "Planning ahead") .. (" - used when a leader runs this raid. Preview with %s: %d HR / %d SR.")
+            :format(seen and "the last rules seen" or "the current rules", set.hardReserves, set.softReserves)
+        if s.raidKey then note = note .. " (Raid leader picked " .. RaidData:GetName(s.raidKey) .. ".)" end
     end
-    self.raidNote:SetText(UI.Color(UI.GREY, note))
-    local myHard, mySoft = Reserves:GetMine()
-    local set = s.settings
-    self.status:SetText(("%s    Hard: %d/%d   Soft: %d/%d left"):format(
-        s.locked and UI.Color("ff4040", "LOCKED") or UI.Color("40ff40", "Open"),
-        set.hardReserves - #myHard, set.hardReserves, set.softReserves - #mySoft, set.softReserves))
+    self.raidNote:SetText(note)
 
     -- Bosses + items.
     local bosses = key and RaidData:GetBosses(key) or {}
@@ -276,7 +480,32 @@ local function refresh(self)
         self.linkStatus:Hide()
     end
 
-    updateChips()
+    updatePanel(self)
+end
+
+local function createColumn(f, kind)
+    local col = {}
+    col.title = kind == HARD and UI.Color(UI.HARD_COLOR, "Hard tier") or UI.Color(UI.SOFT_COLOR, "Soft tier")
+    local inset = UI:Inset(f)
+    inset:SetHeight(PICK_ROWS_VISIBLE * PICK_ROW_H + 8)
+    if kind == HARD then
+        inset:SetPoint("BOTTOMLEFT", 12, 12)
+        inset:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -4, 12)
+    else
+        inset:SetPoint("BOTTOMLEFT", f, "BOTTOM", 4, 12)
+        inset:SetPoint("BOTTOMRIGHT", -12, 12)
+    end
+    col.header = UI:Label(f, nil, "GameFontNormal")
+    col.header:SetPoint("BOTTOMLEFT", inset, "TOPLEFT", 4, 3)
+    col.info = UI:Label(f)
+    col.info:SetPoint("BOTTOMRIGHT", inset, "TOPRIGHT", -6, 4)
+    col.list = UI:CreateScrollList(f, PICK_ROW_H, createPickRow, updatePickRow)
+    col.list:SetPoint("TOPLEFT", inset, "TOPLEFT", 4, -4)
+    col.list:SetPoint("BOTTOMRIGHT", inset, "BOTTOMRIGHT", -26, 4)
+    col.empty = UI:Label(f, ("Empty - use the %s buttons above to add items."):format(kind == HARD and "HR" or "SR"),
+        "GameFontDisableSmall")
+    col.empty:SetPoint("CENTER", inset, "CENTER")
+    return col
 end
 
 local function create()
@@ -284,10 +513,28 @@ local function create()
     frame = f
     f.Refresh = refresh
 
+    -- Rules-change banner (shown for a while after the leader changes rules).
+    f.banner = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    f.banner:SetPoint("TOPLEFT", 12, -32)
+    f.banner:SetPoint("TOPRIGHT", -12, -32)
+    f.banner:SetHeight(24)
+    f.banner:SetBackdrop(UI.BACKDROP)
+    f.banner:SetBackdropColor(0.45, 0.3, 0, 0.95)
+    f.banner:SetBackdropBorderColor(1, 0.82, 0, 1)
+    f.banner:EnableMouse(true)
+    f.banner:SetScript("OnMouseUp", function(self) self:Hide() end)
+    f.banner.text = UI:Label(f.banner, nil, "GameFontHighlight")
+    f.banner.text:SetPoint("LEFT", 8, 0)
+    f.banner.text:SetPoint("RIGHT", -8, 0)
+    f.banner.text:SetWordWrap(false)
+    UI.SetTooltip(f.banner, function() return (f.banner.text:GetText() or "") .. "\n\nClick to dismiss." end)
+    f.banner:Hide()
+
     -- Header row: raid selector, status.
     local raidLabel = UI:Label(f, "Raid:", "GameFontNormal")
-    raidLabel:SetPoint("TOPLEFT", 16, -38)
-    f.raidButton = UI:Button(f, "", 200, 22)
+    raidLabel:SetPoint("TOPLEFT", 16, -68)
+    f.raidButton = UI:Button(f, "", 200, 22, nil,
+        "Which raid's loot catalogue and priority list you are editing. Plan for any raid at any time.")
     f.raidButton:SetPoint("LEFT", raidLabel, "RIGHT", 8, 0)
     f.raidButton:SetScript("OnClick", function(btn)
         UI:ShowRaidMenu(btn, currentKey(), function(key)
@@ -298,16 +545,26 @@ local function create()
         end)
     end)
     f.status = UI:Label(f, nil, "GameFontHighlight")
-    f.status:SetPoint("TOPRIGHT", -16, -42)
+    f.status:SetPoint("LEFT", f.raidButton, "RIGHT", 12, 0)
+    f.status:SetWidth(WIDTH - 300) -- raid button ends ~256px in; keep 16px right margin
+    f.status:SetJustifyH("RIGHT")
+    f.status:SetWordWrap(false)
     f.raidNote = UI:Label(f)
-    f.raidNote:SetPoint("TOPLEFT", 16, -62)
-    f.raidNote:SetPoint("RIGHT", -16, 0)
+    f.raidNote:SetPoint("TOPLEFT", 16, -88)
+    f.raidNote:SetPoint("TOPRIGHT", -16, -88)
     f.raidNote:SetWordWrap(false)
+    f.raidNote:SetTextColor(0.7, 0.7, 0.7)
+
+    -- Bottom panel geometry (bottom-up): tier columns, panel title, link row.
+    local columnsTop = 12 + PICK_ROWS_VISIBLE * PICK_ROW_H + 8
+    local titleY = columnsTop + 24
+    local linkY = titleY + 32
+    local listsBottom = linkY + 28
 
     -- Boss list (left).
     local bossInset = UI:Inset(f)
-    bossInset:SetPoint("TOPLEFT", 12, -78)
-    bossInset:SetPoint("BOTTOMLEFT", 12, 120)
+    bossInset:SetPoint("TOPLEFT", 12, -104)
+    bossInset:SetPoint("BOTTOMLEFT", 12, listsBottom)
     bossInset:SetWidth(196)
     f.bossList = UI:CreateScrollList(f, BOSS_ROW_H, createBossRow, updateBossRow)
     f.bossList:SetPoint("TOPLEFT", bossInset, "TOPLEFT", 4, -4)
@@ -316,7 +573,7 @@ local function create()
     -- Item list (right).
     local itemInset = UI:Inset(f)
     itemInset:SetPoint("TOPLEFT", bossInset, "TOPRIGHT", 6, 0)
-    itemInset:SetPoint("BOTTOMRIGHT", -12, 120)
+    itemInset:SetPoint("BOTTOMRIGHT", -12, listsBottom)
     f.itemList = UI:CreateScrollList(f, ITEM_ROW_H, createItemRow, updateItemRow)
     f.itemList:SetPoint("TOPLEFT", itemInset, "TOPLEFT", 4, -4)
     f.itemList:SetPoint("BOTTOMRIGHT", itemInset, "BOTTOMRIGHT", -26, 4)
@@ -325,9 +582,9 @@ local function create()
     f.empty:SetPoint("LEFT", itemInset, "LEFT", 16, 0)
     f.empty:SetPoint("RIGHT", itemInset, "RIGHT", -16, 0)
 
-    -- Shift-click reserve box.
-    local linkLabel = UI:Label(f, "Shift-click any item here to reserve:", "GameFontNormalSmall")
-    linkLabel:SetPoint("BOTTOMLEFT", 16, 94)
+    -- Shift-click box.
+    local linkLabel = UI:Label(f, "Shift-click any item here to add it:", "GameFontNormalSmall")
+    linkLabel:SetPoint("BOTTOMLEFT", 16, linkY + 4)
     f.linkBox = UI:CreateLinkBox(f, 120, function(id, link)
         linkItemID, linkItemLink = id, link
         f.linkBox:SetText("")
@@ -336,26 +593,27 @@ local function create()
     f.linkBox:SetPoint("LEFT", linkLabel, "RIGHT", 10, 0)
     f.linkItem = UI:CreateItemButton(f, 18)
     f.linkItem:SetPoint("LEFT", f.linkBox, "RIGHT", 8, 0)
-    f.linkItem:SetWidth(170)
+    f.linkItem:SetWidth(220)
     f.linkHR, f.linkSR, f.linkStatus = addReserveButtons(f, function() return linkItemID end)
-    f.linkSR:SetPoint("BOTTOMRIGHT", -16, 92)
+    f.linkSR:SetPoint("BOTTOMRIGHT", -16, linkY)
     f.linkHR:SetPoint("RIGHT", f.linkSR, "LEFT", -4, 0)
     f.linkStatus:SetPoint("RIGHT", f.linkSR, "RIGHT", 0, 0)
 
-    -- My reserves strip.
-    f.myLabel = UI:Label(f, "My reserves:", "GameFontNormal")
-    f.myLabel:SetPoint("BOTTOMLEFT", 16, 62)
-    f.chips = {}
-    for i = 1, CHIPS_PER_ROW * CHIP_ROWS do
-        local c = createChip(f)
-        local col, row = (i - 1) % CHIPS_PER_ROW, math.floor((i - 1) / CHIPS_PER_ROW)
-        c:SetPoint("BOTTOMLEFT", 16 + col * CHIP_W, 36 - row * 24)
-        f.chips[i] = c
-    end
+    -- My priority list.
+    f.panelTitle = UI:Label(f, "My priority list", "GameFontNormal")
+    f.panelTitle:SetPoint("BOTTOMLEFT", 16, titleY + 4)
+    f.clearBtn = UI:Button(f, "Clear list", 90, 22, function()
+        local key = currentKey()
+        if not key then return end
+        pendingClearKey = key
+        StaticPopup_Show("IDWLC_CLEAR_WISHLIST", RaidData:GetName(key))
+    end, "Remove every pick (both tiers) from your list for the raid you are browsing.")
+    f.clearBtn:SetPoint("BOTTOMRIGHT", -12, titleY)
+    f.columns = { [HARD] = createColumn(f, HARD), [SOFT] = createColumn(f, SOFT) }
 
     -- Last rejection from the raid leader (cleared after a while).
     f.reject = UI:Label(f)
-    f.reject:SetPoint("BOTTOMRIGHT", -16, 64)
+    f.reject:SetPoint("RIGHT", f.clearBtn, "LEFT", -12, 0)
     return f
 end
 
@@ -372,4 +630,36 @@ Addon:On("RESERVE_REJECTED", function(itemID, kind, reason)
     local what = (itemID and itemID > 0) and UI.ItemText(itemID) or ""
     frame.reject:SetText(UI.Color("ff5555", "Rejected ") .. what .. " " .. (kind or "") .. ": " .. (reason or ""))
     C_Timer.After(10, function() if frame then frame.reject:SetText("") end end)
+end)
+
+---------------------------------------------------------------------------
+-- Rules-change notice: banner + open the window so players notice.
+---------------------------------------------------------------------------
+local function showNotice(text)
+    local f = frame or create()
+    f.banner.text:SetText(text or "")
+    f.banner:Show()
+    if bannerTimer then bannerTimer:Cancel() end
+    bannerTimer = C_Timer.NewTimer(BANNER_SECONDS, function()
+        bannerTimer = nil
+        if frame then frame.banner:Hide() end
+    end)
+    if not f:IsShown() then f:Show() end
+end
+
+Addon:On("RULES_NOTICE", function(text)
+    -- Don't pop a window up mid boss fight; show it once the encounter ends.
+    if Addon.inEncounter then
+        pendingNotice = text
+        return
+    end
+    showNotice(text)
+end)
+
+Addon:On("ENCOUNTER_ENDED", function()
+    if pendingNotice then
+        local text = pendingNotice
+        pendingNotice = nil
+        showNotice(text)
+    end
 end)

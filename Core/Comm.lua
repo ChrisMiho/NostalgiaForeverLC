@@ -162,10 +162,16 @@ handlers.CFG = function(sender, args)
     if not fromLeader(sender) or Addon:IsLeader() then return end
     local settings, locked, raidKey = Engine.DecodeSettings(args[2])
     if not settings then return end
-    Addon.session:SetSettings(settings)
-    Addon.session:SetLocked(locked)
-    Addon.session.raidKey = raidKey
+    local s = Addon.session
+    local old = {}
+    for k, v in pairs(s.settings) do old[k] = v end
+    local oldRaid, oldLocked = s.raidKey, s.locked
+    s:SetSettings(settings)
+    s:SetLocked(locked)
+    s.raidKey = raidKey
     Addon:Fire("SESSION_CHANGED")
+    -- Reserves module notifies the player and re-sends their selection.
+    Addon:Fire("SETTINGS_CHANGED", old, s.settings, oldRaid, raidKey, oldLocked, locked)
 end
 
 handlers.SET = function(sender, args)
