@@ -1,0 +1,8 @@
+package-as: IDontWannaLC
+
+ignore:
+  - tests
+  - docs
+  - .github
+  - .luacheckrc
+  - README.md
