@@ -68,10 +68,12 @@ Every drop and every award is written to the **loot ledger** automatically: the 
 
 **WoW Forever** (client interface `16001`): Barrow Deeps (10), Hyjal Summit (20), Onyxia's Lair (40).
 - Loot tables and instance IDs aren't published yet. Raids are matched by **instance name**, and **every epic+ item that drops is learned** into the catalogue under "Seen in raid". Until then, add items by shift-clicking their links into the catalogue's link box.
-- **Onyxia's Lair (Forever)** shows the Classic Onyxia loot for now, tagged "(classic)".
+- **Onyxia's Lair (Forever)** borrows the Classic Onyxia loot table, tagged "(classic)". Until Forever serves those items it shows a "not out yet" note; items that drop in the raid appear under "Seen in raid".
 - Future raids go in [Data/Forever.lua](Data/Forever.lua), with their card art in [Data/RaidMeta.lua](Data/RaidMeta.lua).
 
 **Classic raids**: Molten Core, Onyxia's Lair, Blackwing Lair, Zul'Gurub, AQ20, AQ40 and Naxxramas, generated from AtlasLootClassic. On a Classic Era client (`11509`) these are the only raids. On the Forever client they follow the Forever raids, tagged *Classic*.
+
+Until Forever serves the classic raid items, their catalogues show a "not out yet" note (R8b).
 
 To regenerate the classic tables after AtlasLoot updates:
 
