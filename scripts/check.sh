@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Runs every check CI runs. Usage: bash scripts/check.sh [--quiet]
 # --quiet: silent on success; on failure prints "check.sh: <step> failed" and the
-# step's output to stderr. Exit 0 when all steps pass, 1 otherwise.
+# step's output to stderr.
+# Exit codes: 0 all steps pass, 1 a check failed, 3 luajit missing from PATH.
 set -u
 cd "$(dirname "$0")/.." || exit 1
+
+if ! command -v luajit >/dev/null 2>&1; then
+    echo "check.sh: luajit not found on PATH (CI installs it with apt-get install luajit)" >&2
+    exit 3
+fi
 
 quiet=0
 [ "${1:-}" = "--quiet" ] && quiet=1

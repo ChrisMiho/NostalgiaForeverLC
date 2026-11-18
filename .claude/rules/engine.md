@@ -1,7 +1,7 @@
 ---
 paths:
   - "Core/Engine.lua"
-  - "tests/engine_spec.lua"
+  - "tests/*_spec.lua"
   - "tests/run.lua"
 ---
 - `Core/Engine.lua` uses no WoW API or WoW globals: `tests/run.lua` loads it in plain LuaJIT.

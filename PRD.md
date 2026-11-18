@@ -140,7 +140,7 @@ Policy defaults below are settings in **Settings > Master Loot** unless stated o
 
 ## 5. Constraints
 
-- Lua 5.1, WoW addon API only, no libraries. Must load on interface `16001` (WoW Forever) and `11509` (Classic Era, for testing).
+- Lua 5.1, WoW addon API only, no libraries. Must load on interface `16001` (WoW Forever), `11509` (Classic Era, for testing) and `20506`.
 - `Core/Engine.lua` stays free of WoW API calls and is unit tested with `luajit tests/run.lua`.
 - UI is covered by `luajit tests/smoke.lua .` against a mock WoW API. Both must pass in CI.
 - Addon messages are under 255 bytes, `^`-separated, prefix `IDWLC`.

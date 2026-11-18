@@ -27,6 +27,9 @@ Skills and agents: `add-forever-raid` (skill), `prd-reviewer` (agent).
   case where editing it is right.
 - **Stop hook**: runs `bash scripts/check.sh --quiet` when Claude finishes and sends it back to
   work if the check fails. "Done" always means the check passes, so there is no exception.
+  Escape hatch: while mid-refactor with deliberately failing code, set `"disableAllHooks": true` in
+  your own `.claude/settings.local.json` (gitignored), and remove it afterwards. If `luajit` is
+  missing, check.sh exits 3, which does not block the turn (CI still fails).
 - **CI** (`.github/workflows/test.yml`): runs the same `scripts/check.sh` on every push and pull
   request, so a session that skipped the hook still can't merge a failing change.
 
