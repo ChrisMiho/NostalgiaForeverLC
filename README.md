@@ -2,9 +2,13 @@
 
 A **raid loot addon for WoW Forever** that runs your raid on **hard and soft reserves** instead of loot council. Everyone in the raid installs it. Players pick their reserves ahead of time, outside the raid. When something drops, the addon works out who is allowed to roll. **The raid leader still hands out every item themselves.** The addon never distributes loot.
 
-> Status: **draft (v0.4.0)**. Not tested in game yet. See [Known gaps](#known-gaps--next-steps).
+> Status: **alpha (v0.4.0)**. Not tested in game yet. See [Known gaps](#known-gaps--next-steps).
 >
 > Scope and requirements live in [PRD.md](PRD.md). Change the PRD first, then the code.
+
+## Install
+
+Download the latest `NostalgiaForeverLC-<version>-forever.zip` from [Releases](https://github.com/ChrisMiho/NostalgiaForeverLC/releases) and unzip it into `World of Warcraft/_forever_/Interface/AddOns/`, so the addon ends up in `AddOns/NostalgiaForeverLC`. Everyone in the raid needs it.
 
 ## How it works
 
@@ -149,9 +153,19 @@ bash scripts/check.sh
 
 This runs the same checks CI runs: a parse check, a `.toc` completeness check, the unit tests and the UI smoke test.
 
-To install, copy or symlink this folder into `World of Warcraft/_forever_/Interface/AddOns/NostalgiaForeverLC` (or `_classic_era_` for testing).
+To run from a git checkout, copy or symlink this folder into `World of Warcraft/_forever_/Interface/AddOns/NostalgiaForeverLC` (or `_classic_era_` for testing).
 
 Upgrading from IDontWannaLC: saved settings, reserves and ledger history are not carried over. Delete the old `Interface/AddOns/IDontWannaLC` folder, otherwise both addons load and double-announce in raid chat. The install folder must be named `NostalgiaForeverLC` (re-point any symlink), because the client requires the folder name to match the `.toc`.
+
+### Releases
+
+Pushing a version tag builds the zip with the BigWigs packager (`.github/workflows/release.yml`), which stamps the tag into the `.toc` version:
+
+- `v0.4.0-alpha.1`: GitHub pre-release only, never CurseForge.
+- `v0.4.0-beta.1`: GitHub pre-release plus a CurseForge beta file.
+- `v0.4.0`: GitHub release plus a CurseForge release file.
+
+CurseForge uploads need the `CF_API_KEY` secret and `## X-Curse-Project-ID` in the `.toc`; until both exist they are skipped.
 
 ## Known gaps / next steps
 
@@ -167,3 +181,7 @@ Upgrading from IDontWannaLC: saved settings, reserves and ledger history are not
 - **Plus-one counts live on each client.** A loot master who joined late counts only the wins their client saw.
 - **Trade detection** relies on the game's trade events and has not been tried in the client; the "Handed out" button is the fallback.
 - **Ledger sync needs the raid leader online.** Only the leader's copy is a source, so a run can't be fetched while they are offline, and runs recorded before sync existed have no shared ID to offer.
+
+## License
+
+Copyright (C) 2026 ChrisMiho. GNU General Public License v3.0; see [LICENSE](LICENSE).

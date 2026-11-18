@@ -2,7 +2,9 @@
 ## Title: Nostalgia Forever LC
 ## Notes: Hard & soft reserve loot rules for raids. Legendary+ items are restricted; the raid leader always hands out loot.
 ## Author: ChrisMiho
-## Version: 0.4.0
+## Version: @project-version@
+## X-Website: https://github.com/ChrisMiho/NostalgiaForeverLC
+## X-License: GPL-3.0
 ## SavedVariables: NostalgiaForeverLCDB
 ## SavedVariablesPerCharacter: NostalgiaForeverLCCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Dice_02

@@ -1,0 +1,58 @@
+name: Release
+
+# Runs when a version tag such as v0.4.0 is pushed. The packager stamps the
+# version into the .toc, builds the zip and attaches it to a GitHub release.
+#
+# The tag's name decides where the zip goes (PRD section 5):
+#   v0.4.0-alpha.1  untested: a GitHub pre-release only, never CurseForge
+#   v0.4.0-beta.1   GitHub pre-release + CurseForge beta file
+#   v0.4.0          GitHub release + CurseForge release file
+# An alpha stays off CurseForge for two reasons, either one enough: its step is
+# never given the CurseForge key, and "-p 0" unsets the project id. Do not
+# withhold the key with "cond && '' || secret": '' is false, so that always
+# gives the secret.
+# CurseForge needs the CF_API_KEY secret and X-Curse-Project-ID in
+# NostalgiaForeverLC.toc; without either that upload is skipped and the rest
+# still runs.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history, for the changelog
+
+      - name: Install LuaJIT
+        run: sudo apt-get update && sudo apt-get install -y luajit
+
+      - name: Checks
+        run: bash scripts/check.sh
+
+      # The zip is always NostalgiaForeverLC-v<version>-forever.zip.
+      # Exactly one of the next two steps runs.
+      - name: Package an alpha (GitHub pre-release only, no CurseForge)
+        if: contains(github.ref_name, 'alpha')
+        uses: BigWigsMods/packager@v2.6.1
+        with:
+          args: -p 0 -n "{package-name}-{project-version}-forever:{package-name}-{project-version}-forever.zip"
+        env:
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+          # No CF_API_KEY here, on purpose: without it the packager cannot upload.
+
+      # The packager marks a tag with "beta" in its name as a beta file on CurseForge.
+      - name: Package a beta or a release (GitHub and CurseForge)
+        if: ${{ !contains(github.ref_name, 'alpha') }}
+        uses: BigWigsMods/packager@v2.6.1
+        with:
+          args: -n "{package-name}-{project-version}-forever:{package-name}-{project-version}-forever.zip"
+        env:
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}

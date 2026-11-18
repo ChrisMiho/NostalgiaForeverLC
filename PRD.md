@@ -144,6 +144,7 @@ Policy defaults below are settings in **Settings > Master Loot** unless stated o
 - `Core/Engine.lua` stays free of WoW API calls and is unit tested with `luajit tests/run.lua`.
 - UI is covered by `luajit tests/smoke.lua .` against a mock WoW API. Both must pass in CI.
 - Addon messages are under 255 bytes, `^`-separated, prefix `NFLC`.
+- Licensed GPL-3.0. Releases are built from version tags by the BigWigs packager, which stamps the tag into the `.toc` version (R28, R55); a git checkout reports `dev`. An `-alpha` tag is a GitHub pre-release only and never goes to CurseForge; `-beta` and plain tags also go to CurseForge once the project exists.
 
 ## 6. Open questions
 

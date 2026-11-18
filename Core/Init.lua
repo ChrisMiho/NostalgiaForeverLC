@@ -12,6 +12,8 @@ _G.NostalgiaForeverLC = Addon -- public handle for macros / debugging
 
 Addon.name = ADDON_NAME
 Addon.version = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)(ADDON_NAME, "Version") or "dev"
+-- A git checkout still has the packager's placeholder; only release zips carry a real version.
+if Addon.version:find("@", 1, true) then Addon.version = "dev" end
 Addon.PREFIX = "NFLC"
 Addon.COLOR = "|cff33ff99"
 
