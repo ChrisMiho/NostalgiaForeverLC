@@ -1,4 +1,4 @@
-# IDontWannaLC
+# NostalgiaForeverLC
 
 ## Commands
 - `bash scripts/check.sh` runs everything CI runs; `luajit tests/run.lua` runs only the engine unit tests; `luajit tests/smoke.lua .` runs the UI against the mock WoW API.
@@ -11,7 +11,7 @@
 - `scripts/check.sh` passes. Nothing has run in the real game client, so never claim in-game behaviour is verified; say "smoke-tested against the mock".
 
 ## New files
-- Add every new `.lua` to `IDontWannaLC.toc` in load order (Engine, Init, Data, then Core modules, then UI); the smoke test and `tests/toc_check.lua` read the `.toc`.
+- Add every new `.lua` to `NostalgiaForeverLC.toc` in load order (Engine, Init, Data, then Core modules, then UI); the smoke test and `tests/toc_check.lua` read the `.toc`.
 
 ## Plans
 - Plans live in `docs/superpowers/plans/YYYY-MM-DD-<name>.md`.

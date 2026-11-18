@@ -1,8 +1,8 @@
-# I Don't Wanna LC
+# Nostalgia Forever LC
 
 A **raid loot addon for WoW Forever** that runs your raid on **hard and soft reserves** instead of loot council. Everyone in the raid installs it. Players pick their reserves ahead of time, outside the raid. When something drops, the addon works out who is allowed to roll. **The raid leader still hands out every item themselves.** The addon never distributes loot.
 
-> Status: **draft (v0.3.0)**. Not tested in game yet. See [Known gaps](#known-gaps--next-steps).
+> Status: **draft (v0.4.0)**. Not tested in game yet. See [Known gaps](#known-gaps--next-steps).
 >
 > Scope and requirements live in [PRD.md](PRD.md). Change the PRD first, then the code.
 
@@ -10,7 +10,7 @@ A **raid loot addon for WoW Forever** that runs your raid on **hard and soft res
 
 ### Everyone: pick your reserves before the raid
 
-1. `/idwlc` opens the **Raids** tab: one card per raid with its size, your lockout progress (`X/N` bosses), how often you've cleared it, your last kill and how many picks you've saved.
+1. `/nflc` opens the **Raids** tab: one card per raid with its size, your lockout progress (`X/N` bosses), how often you've cleared it, your last kill and how many picks you've saved.
 2. Click a raid to open its **catalogue**. Bosses are on the left; click one to see its loot **grouped by gear slot**, with everything else under *Misc / Quest*. Items behave like any linked item: hover for the tooltip, shift-click to link, ctrl-click to try it on.
 3. Click **HR** or **SR** on an item to put it on your **hard** or **soft** list for that raid. An item can't be on both. Each list holds up to **10** items and is **ranked**; reorder with the arrows at the bottom.
 4. Lists are saved per character, per raid. Do this for every raid you plan to run. **Export / Import** copies a raid's lists as one line of text (another character, a friend).
@@ -50,7 +50,7 @@ The leader's client picks up each drop, and a **loot window pops up for everyone
 | **Undo** | Take an award back: reserve, lists and ledger are restored, and it's announced |
 | **Handed out** | Awarded items stay listed until traded; trades are noticed automatically |
 
-The loot window never gets in the way: close it any time (X or Esc) and it **stays closed until that loot is done**, even as more drops and rolls come in. It never opens during combat. While it's closed you only get a small roll popup for items you can actually roll on; `/idwlc loot` brings the window back.
+The loot window never gets in the way: close it any time (X or Esc) and it **stays closed until that loot is done**, even as more drops and rolls come in. It never opens during combat. While it's closed you only get a small roll popup for items you can actually roll on; `/nflc loot` brings the window back.
 
 ### Loot ledger
 
@@ -79,18 +79,18 @@ luajit tools/gen_classic_raids.lua "<WoW>/_forever_/Interface/AddOns/AtlasLootCl
 
 | Command | Who | |
 |---|---|---|
-| `/idwlc` or `/reserve` | everyone | Open the addon |
-| `/idwlc hr <item>` / `sr <item>` | everyone | Add or remove an item on your hard or soft list for the live raid |
-| `/idwlc status` / `list` | everyone | Your active and standby reserves, or everyone's reserves |
-| `/idwlc settings` | everyone | Settings tab |
-| `/idwlc roster` | leader | Roster tab |
-| `/idwlc approve [hard soft]` | leader | Open the approval prompt, or approve counts directly |
-| `/idwlc raid <key>` / `raids` | leader | Start reserves for a raid, or list raid keys |
-| `/idwlc lock` / `unlock` | leader | Lock or unlock reserves |
-| `/idwlc loot` | everyone | Loot window |
-| `/idwlc ledger` | everyone | Ledger tab |
-| `/idwlc add <item>` | leader | Add an item to the loot window by hand |
-| `/idwlc reset` / `sync` | leader | Collect everyone's reserves again, or re-broadcast |
+| `/nflc` or `/reserve` (`/idwlc` still works) | everyone | Open the addon |
+| `/nflc hr <item>` / `sr <item>` | everyone | Add or remove an item on your hard or soft list for the live raid |
+| `/nflc status` / `list` | everyone | Your active and standby reserves, or everyone's reserves |
+| `/nflc settings` | everyone | Settings tab |
+| `/nflc roster` | leader | Roster tab |
+| `/nflc approve [hard soft]` | leader | Open the approval prompt, or approve counts directly |
+| `/nflc raid <key>` / `raids` | leader | Start reserves for a raid, or list raid keys |
+| `/nflc lock` / `unlock` | leader | Lock or unlock reserves |
+| `/nflc loot` | everyone | Loot window |
+| `/nflc ledger` | everyone | Ledger tab |
+| `/nflc add <item>` | leader | Add an item to the loot window by hand |
+| `/nflc reset` / `sync` | leader | Collect everyone's reserves again, or re-broadcast |
 
 ## Master Loot settings
 
@@ -113,7 +113,7 @@ Saved account wide. Used the next time you approve counts for a raid; the counts
 
 ```
 PRD.md                  Product requirements (source of truth for scope)
-IDontWannaLC.toc        Addon manifest (Forever 16001, Classic Era 11509, TBC Anniversary 20506)
+NostalgiaForeverLC.toc        Addon manifest (Forever 16001, Classic Era 11509, TBC Anniversary 20506)
 Core/Engine.lua         Pure rules: reserves, resolve, rolls, slot groups, roster status, stats. No WoW API, unit tested
 Core/Init.lua           Namespace, SavedVariables, events, API compatibility, internal callbacks
 Core/Comm.lua           Addon-message protocol, throttled queue, pauses during boss encounters
@@ -123,7 +123,7 @@ Core/Stats.lua          Boss kills and clears per raid
 Core/Ledger.lua         Loot ledger: every run's drops and awards, guild sync, backups
 Core/Loot.lua           Drop detection, roll tracking, award announcements
 Core/RaidDataAPI.lua    Raid lookup, instance detection, learned loot, loot grouped by slot
-Core/Slash.lua          /idwlc commands
+Core/Slash.lua          /nflc commands
 Data/Raids.lua          Classic loot tables (generated - see tools/)
 Data/Forever.lua        WoW Forever raids
 Data/RaidMeta.lua       Raid card icon / colour / optional artwork
@@ -149,7 +149,9 @@ bash scripts/check.sh
 
 This runs the same checks CI runs: a parse check, a `.toc` completeness check, the unit tests and the UI smoke test.
 
-To install, copy or symlink this folder into `World of Warcraft/_forever_/Interface/AddOns/IDontWannaLC` (or `_classic_era_` for testing).
+To install, copy or symlink this folder into `World of Warcraft/_forever_/Interface/AddOns/NostalgiaForeverLC` (or `_classic_era_` for testing).
+
+Upgrading from IDontWannaLC: saved settings, reserves and ledger history are not carried over.
 
 ## Known gaps / next steps
 
