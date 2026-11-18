@@ -13,6 +13,11 @@ Addon.RaidData = RaidData
 
 local LEARNED_BOSS = "Seen in raid"
 
+-- Catalogue entries that group loot but aren't a boss you can kill.
+local function isRealBoss(name)
+    return name ~= "Trash" and name ~= LEARNED_BOSS and not name:find("Shared loot", 1, true)
+end
+
 -- WoW Forever reports interface 1600x; Classic Era 115xx etc.
 function RaidData:IsForeverClient()
     local interface = select(4, GetBuildInfo()) or 0
@@ -117,11 +122,50 @@ function RaidData:GetBosses(key)
     return out
 end
 
--- Raids list for dropdowns, plus learned unknown raids.
+-- Card art / colour for a raid (see Data/RaidMeta.lua).
+function RaidData:GetMeta(key)
+    return (RD.meta and RD.meta[key]) or RD.defaultMeta
+end
+
+-- Number of killable bosses we know of (0 = unknown, e.g. new Forever raids).
+function RaidData:GetBossCount(key)
+    local meta = RD.meta and RD.meta[key]
+    if meta and meta.bossCount then return meta.bossCount end
+    local n = 0
+    for _, boss in ipairs(self:GetBosses(key)) do
+        if isRealBoss((boss.name:gsub(" %(classic%)$", ""))) then n = n + 1 end
+    end
+    return n
+end
+
+-- Raid key for an instance name as the game reports it (saved-instance list).
+function RaidData:KeyForName(name)
+    if not name then return nil end
+    for _, raid in ipairs(self:GetAll()) do
+        for _, n in ipairs(raid.instanceNames or { raid.name }) do
+            if n == name then return raid.key end
+        end
+        local meta = RD.meta and RD.meta[raid.key]
+        for _, n in ipairs(meta and meta.names or {}) do
+            if n == name then return raid.key end
+        end
+    end
+    for key, learned in pairs(Addon.db.learnedNames or {}) do
+        if learned == name then return key end
+    end
+end
+
+-- A boss's loot as rows for the catalogue: slot headers followed by their
+-- items, "Misc / Quest" last.
+function RaidData:GetLootRows(boss)
+    return ns.Engine.GroupBySlot(boss and boss.items or {}, function(id) return Addon:GetItemEquipLoc(id) end)
+end
+
+-- Raids list for the home screen, plus learned unknown raids.
 function RaidData:GetChoices()
     local out = {}
     for _, raid in ipairs(self:GetAll()) do
-        table.insert(out, { key = raid.key, name = raid.name, expansion = raid.expansion })
+        table.insert(out, { key = raid.key, name = raid.name, expansion = raid.expansion, size = raid.size })
     end
     for key in pairs(Addon.db.learnedLoot) do
         if not self:Get(key) then

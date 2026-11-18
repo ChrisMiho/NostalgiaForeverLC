@@ -2,7 +2,7 @@
 ## Title: I Don't Wanna LC
 ## Notes: Hard & soft reserve loot rules for raids. Legendary+ items are restricted; the raid leader always hands out loot.
 ## Author: ChrisMiho
-## Version: 0.2.0
+## Version: 0.3.0
 ## SavedVariables: IDontWannaLCDB
 ## SavedVariablesPerCharacter: IDontWannaLCCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Dice_02
@@ -11,14 +11,24 @@ Core\Engine.lua
 Core\Init.lua
 Data\Raids.lua
 Data\Forever.lua
+Data\RaidMeta.lua
 Core\RaidDataAPI.lua
+Core\Stats.lua
 Core\Comm.lua
 Core\Reserves.lua
+Core\Roster.lua
+Core\Ledger.lua
 Core\Loot.lua
 Core\Slash.lua
 
 UI\Widgets.lua
-UI\ReserveFrame.lua
-UI\LeaderFrame.lua
+UI\MainFrame.lua
+UI\RaidList.lua
+UI\RaidView.lua
+UI\RosterPanel.lua
+UI\LedgerPanel.lua
+UI\SettingsPanel.lua
+UI\ApprovePopup.lua
 UI\LootFrame.lua
 UI\RollPopup.lua
+UI\Tooltip.lua

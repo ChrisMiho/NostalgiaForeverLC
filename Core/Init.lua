@@ -27,6 +27,11 @@ local DB_DEFAULTS = {
     learnedLoot = {},                   -- [raidKey] = { [itemID] = true } items seen dropping
     learnedInstances = {},              -- [instanceID] = raidKey (filled at runtime)
     session = nil,                      -- persisted session (reserves survive /reload)
+    ledger = { runs = {} },             -- every raid run with the addon: drops and who got them
+    ledgerBackups = {},                 -- { {time=, reason=, ledger=} ... } newest first
+    disenchanter = "",                  -- who unwanted items go to for disenchanting (default: the loot master)
+    banker = "",                        -- who holds items for the guild bank (default: the loot master)
+    tooltips = true,                    -- show reserve info on item tooltips everywhere
     minimap = { hide = false },
 }
 
@@ -34,6 +39,7 @@ local CHAR_DEFAULTS = {
     framePositions = {},
     wishlists = {},                     -- [raidKey] = { hard = {itemID...}, soft = {itemID...} } in priority order
     lastSeenRules = {},                 -- [raidKey] = last rules the raid leader used (for previews)
+    raidStats = {},                     -- [raidKey] = Engine stats (clears, boss kills this lockout)
 }
 
 local function applyDefaults(target, defaults)
@@ -91,6 +97,11 @@ end
 --   RESERVE_REJECTED(itemID, kind, reason)
 --   SETTINGS_CHANGED(old, new, oldRaid, newRaid, oldLocked, newLocked)  leader's rules arrived/changed (members)
 --   RULES_NOTICE(text)         human-readable summary of a rules change (members)
+--   APPROVAL_NEEDED(raidKey)   raid leader should approve the reserve counts
+--   ROSTER_CHANGED             who has the addon / who has sent reserves changed
+--   STATS_CHANGED              raid kill / clear stats changed
+--   LEDGER_CHANGED             the loot ledger gained / lost an entry
+--   AWARD_UNDONE(itemID, winner)  the loot master took an award back
 
 ---------------------------------------------------------------------------
 -- WoW API compatibility
@@ -110,6 +121,18 @@ end
 function Addon:GetItemLink(itemID)
     local _, link = GetItemInfo(itemID)
     return link
+end
+
+-- Equip location ("INVTYPE_HEAD", "" for non-gear). Uses the instant API so
+-- it works before the item is cached; nil only when the item is unknown.
+local GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or _G.GetItemInfoInstant
+
+function Addon:GetItemEquipLoc(itemID)
+    if GetItemInfoInstant then
+        local _, _, _, equipLoc = GetItemInfoInstant(itemID)
+        if equipLoc then return equipLoc end
+    end
+    return (select(9, GetItemInfo(itemID)))
 end
 
 function Addon:GetLootMethod()
@@ -132,6 +155,34 @@ function Addon:PlayerName()
     return self:NormalizeName(UnitName("player"))
 end
 
+-- "Name-Realm": how clients on other realms know the local player.
+function Addon:FullPlayerName()
+    local name, realm = UnitName("player")
+    if not realm or realm == "" then
+        realm = GetNormalizedRealmName and GetNormalizedRealmName() or nil
+    end
+    if realm and realm ~= "" then return name .. "-" .. realm end
+    return name
+end
+
+-- Is this name (as another client wrote it) the local player?
+function Addon:IsMe(name)
+    return name ~= nil and (name == self:PlayerName() or name == self:FullPlayerName())
+end
+
+-- The key the local player is stored under in a name-keyed table, if any.
+function Addon:MyKeyIn(tbl)
+    local short, full = self:PlayerName(), self:FullPlayerName()
+    if tbl[short] ~= nil then return short end
+    if tbl[full] ~= nil then return full end
+end
+
+-- Chat output. The modern client moved SendChatMessage into C_ChatInfo.
+function Addon:SendChat(msg, channel, target)
+    local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or _G.SendChatMessage
+    return send(msg, channel, nil, target)
+end
+
 function Addon:IsLeader()
     return UnitIsGroupLeader("player") and true or false
 end
@@ -142,6 +193,51 @@ function Addon:GetLeaderName()
     for i = 1, GetNumGroupMembers() do
         local name, rank = GetRaidRosterInfo(i)
         if rank == 2 then return self:NormalizeName(name) end
+    end
+end
+
+-- The raid member a typed name refers to (case-insensitive, realm optional),
+-- as the roster knows them; nil when nobody in the raid matches.
+function Addon:FindRaidMember(name)
+    if not name or not IsInRaid() then return nil end
+    local want = name:lower()
+    local wantShort = want:gsub("%-.*$", "")
+    local byShort
+    for i = 1, GetNumGroupMembers() do
+        local full = GetRaidRosterInfo(i)
+        if full then
+            local norm = self:NormalizeName(full)
+            if norm:lower() == want or full:lower() == want then return norm end
+            if norm:lower():gsub("%-.*$", "") == wantShort then byShort = byShort or norm end
+        end
+    end
+    return byShort
+end
+
+-- Who runs loot: the raid leader, or the assistant the leader put in charge
+-- (falls back to the leader when that player left or lost assist).
+function Addon:GetLootMasterName()
+    local leader = self:GetLeaderName()
+    local lm = self.session and self.session.lootMaster
+    if lm and lm ~= leader and IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local name, rank = GetRaidRosterInfo(i)
+            if name and self:NormalizeName(name) == lm and (rank or 0) >= 1 then return lm end
+        end
+    end
+    return leader
+end
+
+function Addon:IsLootMaster()
+    if not IsInRaid() then return self:IsLeader() end
+    return self:IsMe(self:GetLootMasterName())
+end
+
+-- classID, subclassID of an item (4 = armor; 1-4 cloth..plate, 6 shield).
+function Addon:GetItemClass(itemID)
+    if GetItemInfoInstant then
+        local _, _, _, _, _, classID, subclassID = GetItemInfoInstant(itemID)
+        return classID, subclassID
     end
 end
 
@@ -206,7 +302,15 @@ Addon:RegisterEvent("ADDON_LOADED", function(self, _, name)
         self.session.awards = saved.awards or {}
         self.session.locked = saved.locked or false
         self.session.raidKey = saved.raidKey
+        self.session.approved = saved.approved and saved.raidKey ~= nil or false
+        self.session.lootMaster = saved.lootMaster
+        self.session.log = saved.log or {}
+        self.session.imported = saved.imported or {}
+        self.session.kills = saved.kills or 0
     end
+    self.session.log = self.session.log or {}           -- leader: reserve changes after approval
+    self.session.imported = self.session.imported or {} -- leader: [player] = true, reserves entered by the leader
+    self.session.kills = self.session.kills or 0        -- bosses killed since approval
 
     -- Migrate pre-0.2 flat picks into the current raid's wishlist.
     local old = self.charDB.myReserves
@@ -231,11 +335,16 @@ Addon:RegisterEvent("PLAYER_LOGOUT", function(self)
         awards = self.session.awards,
         locked = self.session.locked,
         raidKey = self.session.raidKey,
+        approved = self.session.approved,
+        lootMaster = self.session.lootMaster,
+        log = self.session.log,
+        imported = self.session.imported,
+        kills = self.session.kills,
     }
 end)
 
 Addon:RegisterEvent("ENCOUNTER_START", function(self) self.inEncounter = true end)
-Addon:RegisterEvent("ENCOUNTER_END", function(self)
+Addon:RegisterEvent("ENCOUNTER_END", function(self, _, encounterID, encounterName, _, _, success)
     self.inEncounter = false
-    self:Fire("ENCOUNTER_ENDED")
+    self:Fire("ENCOUNTER_ENDED", encounterID, encounterName, success == 1 or success == true)
 end)

@@ -1,18 +1,19 @@
--- IDontWannaLC - Reserve window (every raider)
--- Browse any raid's loot catalogue by boss and build a tiered priority list
--- for it (hard tier / soft tier), ahead of time if you like. In the raid the
--- leader has picked, your top picks that fit the slot counts are sent
--- automatically and the rest wait on standby. Shift-click any item link to
--- add it (WoW Forever loot tables start empty); reorder / remove picks in the
--- priority panel at the bottom.
+-- IDontWannaLC - Raid catalogue (Raids tab, after clicking a raid card)
+-- Bosses on the left; click one to see its loot grouped by gear slot, with
+-- everything that isn't gear under "Misc / Quest". Every item has HR / SR
+-- buttons that put it on your hard or soft list for this raid. The lists
+-- span the whole raid, hold up to 10 items each and are ranked: in the live
+-- raid your top picks that fit the approved counts are sent automatically
+-- and the rest wait on standby. Reorder / remove picks in the panel at the
+-- bottom. Shift-click any item link into the link box to add an item the
+-- catalogue doesn't know yet (new raids start with empty loot tables).
 
 local _, ns = ...
 local Addon, Engine, UI = ns.Addon, ns.Engine, ns.UI
 local Reserves, RaidData = ns.Reserves, ns.RaidDataAPI
 local HARD, SOFT = Engine.KIND.HARD, Engine.KIND.SOFT
 
-local WIDTH, HEIGHT = 820, 700
-local ITEM_ROW_H, BOSS_ROW_H, PICK_ROW_H = 38, 20, 18
+local ITEM_ROW_H, SLOT_ROW_H, BOSS_ROW_H, PICK_ROW_H = 38, 22, 20, 18
 local PICK_ROWS_VISIBLE = 9
 local PICK_BUTTON_W = 60
 local BANNER_SECONDS = 15
@@ -20,8 +21,7 @@ local ACTIVE_COLOR, STANDBY_COLOR, LOCKED_COLOR = "40ff40", "a0a0a0", "ff4040"
 local EMPTY_TEXT = "No loot known for this raid yet - items are learned as they drop.\nShift-click an item link to add it to your list."
 
 local frame
-local viewKey          -- raid being browsed; nil = follow the raid leader's pick
-local followedKey      -- leader raid key at the time viewKey was chosen
+local shownKey         -- raid the boss selection belongs to
 local selectedBoss = 1
 local linkItemID, linkItemLink
 local view             -- snapshot of the browsed raid's lists, rebuilt every refresh
@@ -30,7 +30,7 @@ local pendingClearKey  -- raid whose list the "Clear list" popup will clear
 local pendingNotice    -- rules notice that arrived during a boss encounter
 
 StaticPopupDialogs["IDWLC_CLEAR_WISHLIST"] = {
-    text = "I Don't Wanna LC:\nClear your whole priority list (hard and soft tiers) for %s?",
+    text = "I Don't Wanna LC:\nClear both of your reserve lists (hard and soft) for %s?",
     button1 = YES,
     button2 = NO,
     OnAccept = function()
@@ -47,14 +47,9 @@ StaticPopupDialogs["IDWLC_CLEAR_WISHLIST"] = {
 ---------------------------------------------------------------------------
 -- State helpers
 ---------------------------------------------------------------------------
+-- The raid being browsed (chosen on the raid cards).
 local function currentKey()
-    local leaderKey = Addon.session.raidKey
-    -- If the leader switches raids, follow them again.
-    if viewKey and leaderKey ~= followedKey then viewKey = nil end
-    if viewKey then return viewKey end
-    if leaderKey then return leaderKey end
-    local first = RaidData:GetChoices()[1]
-    return first and first.key
+    return UI.raidViewKey
 end
 
 local function plural(n, word)
@@ -81,7 +76,7 @@ local function buildView(key)
     local wish = Reserves:GetWishlist(key)
     local settings = Reserves:SettingsFor(key)
     local selH, selS, sbH, sbS = Reserves:GetSelection(key)
-    local live = key ~= nil and key == Addon.session.raidKey
+    local live = key ~= nil and key == Addon.session.raidKey and Addon.session.approved
     local v = {
         key = key, settings = settings, live = live,
         nActive = #selH + #selS, nStandby = #sbH + #sbS,
@@ -277,6 +272,14 @@ end
 local function createItemRow(parent)
     local row = CreateFrame("Frame", nil, parent)
     local buttonsW = PICK_BUTTON_W * 2 + 16
+    -- Slot header ("Head", "Misc / Quest"): used instead of the item widgets.
+    row.header = UI:Label(row, nil, "GameFontNormal")
+    row.header:SetPoint("BOTTOMLEFT", 4, 3)
+    row.headerLine = row:CreateTexture(nil, "ARTWORK")
+    row.headerLine:SetHeight(1)
+    row.headerLine:SetPoint("BOTTOMLEFT", 2, 0)
+    row.headerLine:SetPoint("BOTTOMRIGHT", -2, 0)
+    row.headerLine:SetColorTexture(1, 0.82, 0, 0.35)
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints()
     row.bg:SetColorTexture(1, 1, 1, 0.04)
@@ -294,13 +297,31 @@ local function createItemRow(parent)
     return row
 end
 
-local function updateItemRow(row, itemID, index)
-    row.itemID = itemID
+local function updateItemRow(row, d, index)
+    local isHeader = d.header ~= nil
+    row.header:SetShown(isHeader)
+    row.headerLine:SetShown(isHeader)
+    row.item:SetShown(not isHeader)
+    row.sub:SetShown(not isHeader)
+    if isHeader then
+        row.itemID = nil
+        row.bg:Hide()
+        row.hr:Hide()
+        row.sr:Hide()
+        row.status:Hide()
+        row.header:SetText(("%s |cff808080(%d)|r"):format(d.header, d.count))
+        return
+    end
+    row.itemID = d.itemID
     row.bg:SetShown(index % 2 == 0)
-    row.item:SetItem(itemID)
-    local st = itemState(itemID)
+    row.item:SetItem(d.itemID)
+    local st = itemState(d.itemID)
     row.sub:SetText(subText(st))
     applyButtons(row.hr, row.sr, row.status, st)
+end
+
+local function itemRowHeight(d)
+    return d.header and SLOT_ROW_H or ITEM_ROW_H
 end
 
 ---------------------------------------------------------------------------
@@ -410,7 +431,7 @@ local function pickData(kind)
 end
 
 local function updatePanel(f)
-    f.panelTitle:SetText("My priority list - " .. (view.key and RaidData:GetName(view.key) or "no raid"))
+    f.panelTitle:SetText("My reserve lists - " .. (view.key and RaidData:GetName(view.key) or "no raid"))
     for _, kind in ipairs({ HARD, SOFT }) do
         local col, t = f.columns[kind], view.tiers[kind]
         col.header:SetText(col.title .. "   " .. UI.Color(UI.GREY, ("%d / %d"):format(#t.list, Engine.MAX_WISHLIST)))
@@ -420,6 +441,7 @@ local function updatePanel(f)
     end
     local total = #view.tiers[HARD].list + #view.tiers[SOFT].list
     f.clearBtn:SetEnabled(view.editable and view.key ~= nil and total > 0)
+    f.exportBtn:SetEnabled(view.key ~= nil and total > 0)
 end
 
 ---------------------------------------------------------------------------
@@ -431,33 +453,52 @@ local function refresh(self)
     view = buildView(key)
 
     -- Header: browsed raid, live rules, my picks.
-    self.raidButton:SetText(key and RaidData:GetName(key) or "(choose raid)")
+    if key ~= shownKey then
+        shownKey, selectedBoss = key, 1
+    end
+    self.title:SetText(key and RaidData:GetName(key) or "")
     local status
-    if s.raidKey then
-        status = ("%s: %d HR / %d SR per player - %s"):format(RaidData:GetName(s.raidKey),
+    if view.live then
+        status = ("%d HR / %d SR per player - %s"):format(
             s.settings.hardReserves, s.settings.softReserves,
             s.locked and UI.Color(LOCKED_COLOR, "LOCKED") or UI.Color(ACTIVE_COLOR, "Open"))
     else
-        status = UI.Color(UI.GREY, "No raid set by the raid leader yet")
+        status = UI.Color(UI.GREY, "Not the live raid")
     end
-    self.status:SetText(("%s     Your picks: %s, %s"):format(status,
-        UI.Color(ACTIVE_COLOR, view.nActive .. " active"), UI.Color(STANDBY_COLOR, view.nStandby .. " standby")))
+    local picks = ("Your picks: %s, %s"):format(
+        UI.Color(ACTIVE_COLOR, view.nActive .. " active"), UI.Color(STANDBY_COLOR, view.nStandby .. " standby"))
+    -- Live raid with slots going unused: make it hard to miss.
+    local mh, ms = 0, 0
+    if view.live then
+        mh, ms = Engine.Shortfall(view.tiers[HARD].nActive, view.tiers[SOFT].nActive, view.settings)
+    end
+    if mh + ms > 0 then
+        local need = {}
+        if mh > 0 then need[#need + 1] = mh .. " HR" end
+        if ms > 0 then need[#need + 1] = ms .. " SR" end
+        picks = UI.Color(LOCKED_COLOR, (view.editable and "Add %s more" or "%s unused"):format(table.concat(need, " + ")))
+            .. "   " .. picks
+    end
+    self.status:SetText(status .. "     " .. picks)
 
     local note
     local set = view.settings
     if view.live then
         if not view.editable then
-            note = UI.Color(LOCKED_COLOR, "Locked by the raid leader") .. " - this raid's list can't be changed right now."
+            note = UI.Color(LOCKED_COLOR, "Locked by the raid leader") .. " - this raid's lists can't be changed right now."
         else
             note = UI.Color(ACTIVE_COLOR, "Live raid:") .. (" your top %d hard / %d soft picks are sent to the raid leader; the rest wait on standby.")
                 :format(set.hardReserves, set.softReserves)
-            if not IsInRaid() then note = note .. " Sent when you join the raid." end
         end
     else
-        local seen = key and Addon.charDB.lastSeenRules[key]
+        local source = "default counts"
+        if Reserves:HasPreset(key) then
+            source = "the counts you last approved"
+        elseif key and Addon.charDB.lastSeenRules[key] then
+            source = "the last rules seen"
+        end
         note = UI.Color(UI.SOFT_COLOR, "Planning ahead") .. (" - used when a leader runs this raid. Preview with %s: %d HR / %d SR.")
-            :format(seen and "the last rules seen" or "the current rules", set.hardReserves, set.softReserves)
-        if s.raidKey then note = note .. " (Raid leader picked " .. RaidData:GetName(s.raidKey) .. ".)" end
+            :format(source, set.hardReserves, set.softReserves)
     end
     self.raidNote:SetText(note)
 
@@ -466,9 +507,9 @@ local function refresh(self)
     if selectedBoss > #bosses then selectedBoss = 1 end
     self.bossList:SetData(bosses)
     local boss = bosses[selectedBoss]
-    local items = boss and boss.items or {}
-    self.itemList:SetData(items)
-    self.empty:SetShown(#items == 0)
+    local rows = RaidData:GetLootRows(boss)
+    self.itemList:SetData(rows)
+    self.empty:SetShown(#rows == 0)
 
     -- Shift-click box.
     self.linkItem:SetItem(linkItemID, linkItemLink)
@@ -485,15 +526,15 @@ end
 
 local function createColumn(f, kind)
     local col = {}
-    col.title = kind == HARD and UI.Color(UI.HARD_COLOR, "Hard tier") or UI.Color(UI.SOFT_COLOR, "Soft tier")
+    col.title = kind == HARD and UI.Color(UI.HARD_COLOR, "Hard reserves (HR)") or UI.Color(UI.SOFT_COLOR, "Soft reserves (SR)")
     local inset = UI:Inset(f)
     inset:SetHeight(PICK_ROWS_VISIBLE * PICK_ROW_H + 8)
     if kind == HARD then
-        inset:SetPoint("BOTTOMLEFT", 12, 12)
-        inset:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -4, 12)
+        inset:SetPoint("BOTTOMLEFT", 0, 0)
+        inset:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -4, 0)
     else
-        inset:SetPoint("BOTTOMLEFT", f, "BOTTOM", 4, 12)
-        inset:SetPoint("BOTTOMRIGHT", -12, 12)
+        inset:SetPoint("BOTTOMLEFT", f, "BOTTOM", 4, 0)
+        inset:SetPoint("BOTTOMRIGHT", 0, 0)
     end
     col.header = UI:Label(f, nil, "GameFontNormal")
     col.header:SetPoint("BOTTOMLEFT", inset, "TOPLEFT", 4, 3)
@@ -508,18 +549,35 @@ local function createColumn(f, kind)
     return col
 end
 
-local function create()
-    local f = UI:CreateWindow("Reserve", "I Don't Wanna LC - Reserves", WIDTH, HEIGHT)
+function UI:CreateRaidView(parent)
+    local f = CreateFrame("Frame", nil, parent)
     frame = f
     f.Refresh = refresh
 
-    -- Rules-change banner (shown for a while after the leader changes rules).
+    -- Header row: back to the raid cards, raid name, status.
+    f.back = UI:Button(f, "< Raids", 80, 22, function() UI:ShowRaidList() end, "Back to the list of raids.")
+    f.back:SetPoint("TOPLEFT", 0, 0)
+    f.title = UI:Label(f, nil, "GameFontNormalLarge")
+    f.title:SetPoint("LEFT", f.back, "RIGHT", 12, 0)
+    f.status = UI:Label(f, nil, "GameFontHighlight")
+    f.status:SetPoint("TOPRIGHT", -4, -5)
+    f.status:SetWidth(480)
+    f.status:SetJustifyH("RIGHT")
+    f.status:SetWordWrap(false)
+    f.raidNote = UI:Label(f)
+    f.raidNote:SetPoint("TOPLEFT", 4, -28)
+    f.raidNote:SetPoint("TOPRIGHT", -4, -28)
+    f.raidNote:SetWordWrap(false)
+    f.raidNote:SetTextColor(0.7, 0.7, 0.7)
+
+    -- Rules-change banner (covers the note line for a while after the leader
+    -- changes the rules).
     f.banner = CreateFrame("Frame", nil, f, "BackdropTemplate")
-    f.banner:SetPoint("TOPLEFT", 12, -32)
-    f.banner:SetPoint("TOPRIGHT", -12, -32)
-    f.banner:SetHeight(24)
+    f.banner:SetPoint("TOPLEFT", 0, -23)
+    f.banner:SetPoint("TOPRIGHT", 0, -23)
+    f.banner:SetHeight(22)
     f.banner:SetBackdrop(UI.BACKDROP)
-    f.banner:SetBackdropColor(0.45, 0.3, 0, 0.95)
+    f.banner:SetBackdropColor(0.45, 0.3, 0, 1)
     f.banner:SetBackdropBorderColor(1, 0.82, 0, 1)
     f.banner:EnableMouse(true)
     f.banner:SetScript("OnMouseUp", function(self) self:Hide() end)
@@ -530,51 +588,26 @@ local function create()
     UI.SetTooltip(f.banner, function() return (f.banner.text:GetText() or "") .. "\n\nClick to dismiss." end)
     f.banner:Hide()
 
-    -- Header row: raid selector, status.
-    local raidLabel = UI:Label(f, "Raid:", "GameFontNormal")
-    raidLabel:SetPoint("TOPLEFT", 16, -68)
-    f.raidButton = UI:Button(f, "", 200, 22, nil,
-        "Which raid's loot catalogue and priority list you are editing. Plan for any raid at any time.")
-    f.raidButton:SetPoint("LEFT", raidLabel, "RIGHT", 8, 0)
-    f.raidButton:SetScript("OnClick", function(btn)
-        UI:ShowRaidMenu(btn, currentKey(), function(key)
-            viewKey = (key ~= Addon.session.raidKey) and key or nil
-            followedKey = Addon.session.raidKey
-            selectedBoss = 1
-            f:Refresh()
-        end)
-    end)
-    f.status = UI:Label(f, nil, "GameFontHighlight")
-    f.status:SetPoint("LEFT", f.raidButton, "RIGHT", 12, 0)
-    f.status:SetWidth(WIDTH - 300) -- raid button ends ~256px in; keep 16px right margin
-    f.status:SetJustifyH("RIGHT")
-    f.status:SetWordWrap(false)
-    f.raidNote = UI:Label(f)
-    f.raidNote:SetPoint("TOPLEFT", 16, -88)
-    f.raidNote:SetPoint("TOPRIGHT", -16, -88)
-    f.raidNote:SetWordWrap(false)
-    f.raidNote:SetTextColor(0.7, 0.7, 0.7)
-
     -- Bottom panel geometry (bottom-up): tier columns, panel title, link row.
-    local columnsTop = 12 + PICK_ROWS_VISIBLE * PICK_ROW_H + 8
+    local columnsTop = PICK_ROWS_VISIBLE * PICK_ROW_H + 8
     local titleY = columnsTop + 24
     local linkY = titleY + 32
     local listsBottom = linkY + 28
 
-    -- Boss list (left).
+    -- Boss catalogue (left).
     local bossInset = UI:Inset(f)
-    bossInset:SetPoint("TOPLEFT", 12, -104)
-    bossInset:SetPoint("BOTTOMLEFT", 12, listsBottom)
-    bossInset:SetWidth(196)
+    bossInset:SetPoint("TOPLEFT", 0, -48)
+    bossInset:SetPoint("BOTTOMLEFT", 0, listsBottom)
+    bossInset:SetWidth(200)
     f.bossList = UI:CreateScrollList(f, BOSS_ROW_H, createBossRow, updateBossRow)
     f.bossList:SetPoint("TOPLEFT", bossInset, "TOPLEFT", 4, -4)
     f.bossList:SetPoint("BOTTOMRIGHT", bossInset, "BOTTOMRIGHT", -26, 4)
 
-    -- Item list (right).
+    -- The selected boss's loot, grouped by gear slot (right).
     local itemInset = UI:Inset(f)
     itemInset:SetPoint("TOPLEFT", bossInset, "TOPRIGHT", 6, 0)
-    itemInset:SetPoint("BOTTOMRIGHT", -12, listsBottom)
-    f.itemList = UI:CreateScrollList(f, ITEM_ROW_H, createItemRow, updateItemRow)
+    itemInset:SetPoint("BOTTOMRIGHT", 0, listsBottom)
+    f.itemList = UI:CreateScrollList(f, ITEM_ROW_H, createItemRow, updateItemRow, itemRowHeight)
     f.itemList:SetPoint("TOPLEFT", itemInset, "TOPLEFT", 4, -4)
     f.itemList:SetPoint("BOTTOMRIGHT", itemInset, "BOTTOMRIGHT", -26, 4)
     f.empty = UI:Label(f, EMPTY_TEXT, "GameFontDisable")
@@ -584,7 +617,7 @@ local function create()
 
     -- Shift-click box.
     local linkLabel = UI:Label(f, "Shift-click any item here to add it:", "GameFontNormalSmall")
-    linkLabel:SetPoint("BOTTOMLEFT", 16, linkY + 4)
+    linkLabel:SetPoint("BOTTOMLEFT", 4, linkY + 4)
     f.linkBox = UI:CreateLinkBox(f, 120, function(id, link)
         linkItemID, linkItemLink = id, link
         f.linkBox:SetText("")
@@ -595,34 +628,44 @@ local function create()
     f.linkItem:SetPoint("LEFT", f.linkBox, "RIGHT", 8, 0)
     f.linkItem:SetWidth(220)
     f.linkHR, f.linkSR, f.linkStatus = addReserveButtons(f, function() return linkItemID end)
-    f.linkSR:SetPoint("BOTTOMRIGHT", -16, linkY)
+    f.linkSR:SetPoint("BOTTOMRIGHT", -4, linkY)
     f.linkHR:SetPoint("RIGHT", f.linkSR, "LEFT", -4, 0)
     f.linkStatus:SetPoint("RIGHT", f.linkSR, "RIGHT", 0, 0)
 
-    -- My priority list.
-    f.panelTitle = UI:Label(f, "My priority list", "GameFontNormal")
-    f.panelTitle:SetPoint("BOTTOMLEFT", 16, titleY + 4)
-    f.clearBtn = UI:Button(f, "Clear list", 90, 22, function()
+    -- My lists.
+    f.panelTitle = UI:Label(f, "My reserve lists", "GameFontNormal")
+    f.panelTitle:SetPoint("BOTTOMLEFT", 4, titleY + 4)
+    f.clearBtn = UI:Button(f, "Clear lists", 90, 22, function()
         local key = currentKey()
         if not key then return end
         pendingClearKey = key
         StaticPopup_Show("IDWLC_CLEAR_WISHLIST", RaidData:GetName(key))
-    end, "Remove every pick (both tiers) from your list for the raid you are browsing.")
-    f.clearBtn:SetPoint("BOTTOMRIGHT", -12, titleY)
+    end, "Remove every pick (both lists) for this raid.")
+    f.clearBtn:SetPoint("BOTTOMRIGHT", 0, titleY)
+    f.importBtn = UI:Button(f, "Import", 70, 22, function()
+        UI:ShowInput("Import reserve lists", "Paste a list exported from this addon (it names its raid). "
+            .. "It replaces your lists for that raid.", "Import", function(text)
+            local key, nh, nsoft = Reserves:ImportWishlist(text)
+            if not key then
+                if nh ~= "locked" then Addon:Print("|cffff5555Import failed:|r %s", tostring(nh)) end
+                return
+            end
+            Addon:Print("Imported %d hard and %d soft picks for %s.", nh, nsoft, RaidData:GetName(key))
+            UI:OpenRaid(key)
+        end)
+    end, "Replace your lists for a raid with a list exported from this addon (another character, a friend).")
+    f.importBtn:SetPoint("RIGHT", f.clearBtn, "LEFT", -4, 0)
+    f.exportBtn = UI:Button(f, "Export", 70, 22, function()
+        local key = currentKey()
+        if key then UI:ShowText("Your lists - " .. RaidData:GetName(key), Reserves:ExportWishlist(key)) end
+    end, "Your lists for this raid as one line of text, to copy to another character or share.")
+    f.exportBtn:SetPoint("RIGHT", f.importBtn, "LEFT", -4, 0)
     f.columns = { [HARD] = createColumn(f, HARD), [SOFT] = createColumn(f, SOFT) }
 
     -- Last rejection from the raid leader (cleared after a while).
     f.reject = UI:Label(f)
-    f.reject:SetPoint("RIGHT", f.clearBtn, "LEFT", -12, 0)
+    f.reject:SetPoint("RIGHT", f.exportBtn, "LEFT", -12, 0)
     return f
-end
-
-function UI:ToggleReserve()
-    UI:ToggleWindow(frame or create())
-end
-
-function UI:ShowReserve()
-    (frame or create()):Show()
 end
 
 Addon:On("RESERVE_REJECTED", function(itemID, kind, reason)
@@ -636,15 +679,15 @@ end)
 -- Rules-change notice: banner + open the window so players notice.
 ---------------------------------------------------------------------------
 local function showNotice(text)
-    local f = frame or create()
-    f.banner.text:SetText(text or "")
-    f.banner:Show()
+    UI:OpenRaid(Addon.session.raidKey) -- creates the view if needed
+    if not frame then return end
+    frame.banner.text:SetText(text or "")
+    frame.banner:Show()
     if bannerTimer then bannerTimer:Cancel() end
     bannerTimer = C_Timer.NewTimer(BANNER_SECONDS, function()
         bannerTimer = nil
         if frame then frame.banner:Hide() end
     end)
-    if not f:IsShown() then f:Show() end
 end
 
 Addon:On("RULES_NOTICE", function(text)

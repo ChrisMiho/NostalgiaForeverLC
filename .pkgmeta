@@ -7,3 +7,4 @@ ignore:
   - .github
   - .luacheckrc
   - README.md
+  - PRD.md

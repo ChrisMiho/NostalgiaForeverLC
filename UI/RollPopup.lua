@@ -1,7 +1,8 @@
 -- IDontWannaLC - Roll popup (raid members)
 -- Shown when the raid leader puts an item up. Tells you how the item is
 -- handled and whether you may roll; "Roll" does /roll 1-100 for you.
--- The raid leader uses the loot window instead, so the popup skips them.
+-- The raid leader uses the loot window instead, so the popup skips them; so
+-- does anyone who has the loot window open (it has its own Roll button).
 
 local _, ns = ...
 local Addon, Engine, UI = ns.Addon, ns.Engine, ns.UI
@@ -39,9 +40,12 @@ local function modeText(r)
 end
 
 local function setButtons(showRoll, rollEnabled, passText)
+    local offSpec = showRoll and Loot:AllowsOffSpec()
     popup.rollBtn:SetShown(showRoll)
     popup.rollBtn:SetEnabled(rollEnabled)
-    popup.rollBtn:SetText(phase == "rolled" and "Rolled" or "Roll (1-100)")
+    popup.rollBtn:SetText(phase == "rolled" and "Rolled" or (offSpec and "Main spec" or "Roll (1-100)"))
+    popup.osBtn:SetShown(offSpec)
+    popup.osBtn:SetEnabled(rollEnabled)
     popup.passBtn:SetText(passText)
     popup.passBtn:Show()
 end
@@ -53,6 +57,7 @@ local function refresh(self)
         self.mode:SetText(UI.Color("40ff40", "You won!"))
         self.status:SetText("The raid leader will trade it to you.")
         popup.rollBtn:Hide()
+        popup.osBtn:Hide()
         popup.passBtn:SetText("OK")
         return
     end
@@ -95,9 +100,16 @@ local function create()
         phase = "rolled"
         f:Refresh()
     end)
-    f.rollBtn:SetPoint("BOTTOMLEFT", 40, 14)
-    f.passBtn = UI:Button(f, "Pass", 120, 24, function() f:Hide() end)
-    f.passBtn:SetPoint("BOTTOMRIGHT", -40, 14)
+    f.rollBtn:SetSize(104, 24)
+    f.rollBtn:SetPoint("BOTTOMLEFT", 12, 14)
+    f.osBtn = UI:Button(f, "Off spec", 104, 24, function()
+        Loot:DoRoll(true)
+        phase = "rolled"
+        f:Refresh()
+    end, "Does /roll 1-99. Only wins when nobody rolls main spec.")
+    f.osBtn:SetPoint("LEFT", f.rollBtn, "RIGHT", 4, 0)
+    f.passBtn = UI:Button(f, "Pass", 96, 24, function() f:Hide() end)
+    f.passBtn:SetPoint("BOTTOMRIGHT", -12, 14)
     f:HookScript("OnHide", function()
         if hideTimer then hideTimer:Cancel(); hideTimer = nil end
     end)
@@ -111,9 +123,13 @@ local function show()
 end
 
 Addon:On("ROLL_STARTED", function()
-    if Addon:IsLeader() then return end
+    if Addon:IsLootMaster() then return end
     local r = Loot.remote
     if not r then return end
+    if UI.IsLootShown and UI:IsLootShown() then return end
+    -- Loot window closed (e.g. clearing trash): only interrupt players who
+    -- can actually roll or whose hard reserve it is.
+    if Loot:CanIRoll() == false and not (r.eligible and Addon:MyKeyIn(r.eligible)) then return end
     -- A tie re-roll reuses the id; let tied players roll again.
     state = { id = r.id, itemID = r.itemID, mode = r.mode, eligible = r.eligible, unknownList = r.unknownList }
     phase = "up"
@@ -121,8 +137,8 @@ Addon:On("ROLL_STARTED", function()
 end)
 
 Addon:On("ROLL_ENDED", function(entry, winner)
-    if Addon:IsLeader() then return end
-    if winner and winner == Addon:PlayerName() then
+    if Addon:IsLootMaster() then return end
+    if winner and Addon:IsMe(winner) then
         state = state or {}
         state.itemID = (entry and entry.itemID) or state.itemID
         phase = "won"

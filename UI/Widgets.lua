@@ -92,12 +92,14 @@ end
 
 -- Movable, ESC-closable window with a title and a close button. Created
 -- hidden; OnShow calls f:Refresh() when defined. defaultPoint = {point, x, y}.
-function UI:CreateWindow(name, title, width, height, defaultPoint)
+-- strata defaults to DIALOG; the main window uses MEDIUM so the dressing room
+-- and other game panels can open on top of it.
+function UI:CreateWindow(name, title, width, height, defaultPoint, strata)
     local globalName = "IDWLC_" .. name
     local f = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
     f.idwlcName = name
     f:SetSize(width, height)
-    f:SetFrameStrata("DIALOG")
+    f:SetFrameStrata(strata or "DIALOG")
     f:SetToplevel(true)
     f:SetClampedToScreen(true)
     f:SetMovable(true)
@@ -159,13 +161,6 @@ function UI:Button(parent, text, width, height, onClick, tooltip)
     return b
 end
 
--- HR / SR style toggle: green text + locked highlight while active.
-function UI.SetToggleState(btn, label, active, enabled)
-    btn:SetText(active and ("|cff33ff33" .. label .. "|r") or label)
-    if active then btn:LockHighlight() else btn:UnlockHighlight() end
-    btn:SetEnabled(enabled and true or false)
-end
-
 function UI:CheckButton(parent, label, onClick, tooltip)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(24, 24)
@@ -192,18 +187,53 @@ local function itemLinkString(self)
     return "item:" .. self.itemID
 end
 
+-- Same tooltip as an item link anywhere else in the game, including the
+-- side-by-side comparison with equipped gear (shift, or the "always compare"
+-- game option).
+local hoveredItem -- item button under the mouse, for modifier-key changes
+
 local function itemOnEnter(self)
     if not self.itemID then return end
+    hoveredItem = self
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetHyperlink(itemLinkString(self))
     GameTooltip:Show()
+    if GameTooltip_ShowCompareItem then
+        local always = GetCVarBool and GetCVarBool("alwaysCompareItems")
+        if always or IsModifiedClick("COMPAREITEMS") then GameTooltip_ShowCompareItem(GameTooltip) end
+    end
+    if IsModifiedClick("DRESSUP") and ShowInspectCursor then ShowInspectCursor() end
 end
 
+local function itemOnLeave()
+    hoveredItem = nil
+    GameTooltip_Hide()
+    if ResetCursor then ResetCursor() end
+end
+
+-- Pressing / releasing shift or ctrl while already hovering an item: redo
+-- the tooltip so the comparison and the inspect cursor follow the keys.
+Addon:RegisterEvent("MODIFIER_STATE_CHANGED", function()
+    local b = hoveredItem
+    if not b then return end
+    if b:IsVisible() and b:IsMouseOver() then
+        if ResetCursor then ResetCursor() end
+        itemOnEnter(b)
+    else
+        hoveredItem = nil
+    end
+end)
+
+-- Behaves like a linked item: shift-click puts the link in chat (or one of
+-- our link boxes), ctrl-click previews it in the dressing room.
 local function itemOnClick(self, button)
     if not self.itemID then return end
+    local link = self.link or select(2, UI.ItemInfo(self.itemID))
+    if link and HandleModifiedItemClick and HandleModifiedItemClick(link) then return end
     if IsModifiedClick("CHATLINK") or IsShiftKeyDown() then
-        local link = self.link or select(2, UI.ItemInfo(self.itemID))
         UI.InsertLink(link)
+    elseif link and IsModifiedClick("DRESSUP") and DressUpItemLink then
+        DressUpItemLink(link)
     elseif self.onClick then
         self:onClick(button)
     end
@@ -236,27 +266,31 @@ function UI:CreateItemButton(parent, iconSize)
     b.text:SetJustifyH("LEFT")
     b.text:SetWordWrap(false)
     b:SetScript("OnEnter", itemOnEnter)
-    b:SetScript("OnLeave", GameTooltip_Hide)
+    b:SetScript("OnLeave", itemOnLeave)
     b:SetScript("OnClick", itemOnClick)
     b.SetItem = itemSetItem
     return b
 end
 
 ---------------------------------------------------------------------------
--- Scroll list with row pooling (fixed row height; all rows laid out)
+-- Scroll list with row pooling (all rows laid out). Rows are rowHeight tall
+-- unless heightOf(data) says otherwise (e.g. short section headers).
 ---------------------------------------------------------------------------
 local scrollCount = 0
 
 local function scrollSetData(sf, data)
+    local y = 0
     for i, item in ipairs(data) do
         local row = sf.rows[i]
         if not row then
             row = sf.createRow(sf.content)
-            row:SetHeight(sf.rowHeight)
-            row:SetPoint("TOPLEFT", sf.content, "TOPLEFT", 0, -(i - 1) * sf.rowHeight)
-            row:SetPoint("RIGHT", sf.content, "RIGHT")
             sf.rows[i] = row
         end
+        local h = sf.heightOf and sf.heightOf(item) or sf.rowHeight
+        row:SetHeight(h)
+        row:SetPoint("TOPLEFT", sf.content, "TOPLEFT", 0, -y)
+        row:SetPoint("TOPRIGHT", sf.content, "TOPRIGHT", 0, -y)
+        y = y + h
         row.index, row.data = i, item
         sf.updateRow(row, item, i)
         row:Show()
@@ -265,15 +299,16 @@ local function scrollSetData(sf, data)
         sf.rows[i]:Hide()
         sf.rows[i].data = nil
     end
-    sf.content:SetHeight(math.max(1, #data * sf.rowHeight))
+    sf.content:SetHeight(math.max(1, y))
     sf:UpdateScrollChildRect()
     local range = sf:GetVerticalScrollRange()
     if sf:GetVerticalScroll() > range then sf:SetVerticalScroll(range) end
 end
 
--- createRow(content) -> frame; updateRow(row, data, index).
--- The template's scroll bar sits ~24px to the right of the frame.
-function UI:CreateScrollList(parent, rowHeight, createRow, updateRow)
+-- createRow(content) -> frame; updateRow(row, data, index); optional
+-- heightOf(data) -> height. The template's scroll bar sits ~24px to the
+-- right of the frame.
+function UI:CreateScrollList(parent, rowHeight, createRow, updateRow, heightOf)
     scrollCount = scrollCount + 1
     -- Named: older UIPanelScrollFrameTemplate code looks up $parentScrollBar.
     local sf = CreateFrame("ScrollFrame", "IDWLC_Scroll" .. scrollCount, parent, "UIPanelScrollFrameTemplate")
@@ -282,7 +317,7 @@ function UI:CreateScrollList(parent, rowHeight, createRow, updateRow)
     sf:SetScrollChild(content)
     sf:HookScript("OnSizeChanged", function(_, w) content:SetWidth(math.max(1, w or 1)) end)
     sf.content, sf.rows, sf.rowHeight = content, {}, rowHeight
-    sf.createRow, sf.updateRow = createRow, updateRow
+    sf.createRow, sf.updateRow, sf.heightOf = createRow, updateRow, heightOf
     sf.SetData = scrollSetData
     return sf
 end
@@ -323,7 +358,8 @@ local function createMenu()
     return m
 end
 
-function UI:ShowMenu(anchor, items)
+function UI:ShowMenu(anchor, items, colWidth)
+    colWidth = colWidth or MENU_COL_W
     local m = self.menu or createMenu()
     self.menu = m
     if m:IsShown() and m.anchor == anchor then m:Hide() return end
@@ -334,7 +370,6 @@ function UI:ShowMenu(anchor, items)
         local b = m.buttons[i]
         if not b then
             b = CreateFrame("Button", nil, m)
-            b:SetSize(MENU_COL_W - 8, MENU_ROW)
             b:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
             b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             b.text:SetPoint("LEFT", 4, 0)
@@ -348,8 +383,9 @@ function UI:ShowMenu(anchor, items)
             m.buttons[i] = b
         end
         local col, row = math.floor((i - 1) / MENU_MAX_ROWS), (i - 1) % MENU_MAX_ROWS
+        b:SetSize(colWidth - 8, MENU_ROW)
         b:ClearAllPoints()
-        b:SetPoint("TOPLEFT", 6 + col * MENU_COL_W, -6 - row * MENU_ROW)
+        b:SetPoint("TOPLEFT", 6 + col * colWidth, -6 - row * MENU_ROW)
         b.text:SetText((it.checked and "|cff40ff40>|r " or "  ") .. it.text)
         if it.disabled then b.text:SetTextColor(0.5, 0.5, 0.5) else b.text:SetTextColor(1, 1, 1) end
         b.func = it.func
@@ -359,13 +395,13 @@ function UI:ShowMenu(anchor, items)
     for i = #items + 1, #m.buttons do m.buttons[i]:Hide() end
 
     local cols = math.ceil(#items / MENU_MAX_ROWS)
-    m:SetSize(cols * MENU_COL_W + 4, math.min(#items, MENU_MAX_ROWS) * MENU_ROW + 12)
+    m:SetSize(cols * colWidth + 4, math.min(#items, MENU_MAX_ROWS) * MENU_ROW + 12)
     m:ClearAllPoints()
     m:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
     m:Show()
 end
 
--- Raid picker menu shared by the reserve and leader windows.
+-- Raid picker menu (the leader starting reserves for a raid before zoning in).
 function UI:ShowRaidMenu(anchor, currentKey, onPick)
     local leaderKey = Addon.session.raidKey
     local tagClassic = ns.RaidDataAPI:IsForeverClient()
@@ -480,6 +516,59 @@ function UI:ShowText(title, text)
 end
 
 ---------------------------------------------------------------------------
+-- Text input dialog (paste an import)
+---------------------------------------------------------------------------
+-- onAccept(text) runs when the accept button is pressed.
+function UI:ShowInput(title, hint, acceptLabel, onAccept)
+    local f = self.inputDialog
+    if not f then
+        f = self:CreateWindow("InputDialog", title, 520, 360)
+        f.hint = self:Label(f, nil, "GameFontHighlightSmall")
+        f.hint:SetPoint("TOPLEFT", 14, -30)
+        f.hint:SetPoint("TOPRIGHT", -14, -30)
+        local inset = self:Inset(f)
+        inset:SetPoint("TOPLEFT", 12, -76)
+        inset:SetPoint("BOTTOMRIGHT", -12, 44)
+        local sf = CreateFrame("ScrollFrame", "IDWLC_InputScroll", f, "UIPanelScrollFrameTemplate")
+        sf:SetPoint("TOPLEFT", inset, "TOPLEFT", 6, -6)
+        sf:SetPoint("BOTTOMRIGHT", inset, "BOTTOMRIGHT", -28, 6)
+        local eb = CreateFrame("EditBox", nil, sf)
+        eb:SetMultiLine(true)
+        eb:SetAutoFocus(false)
+        eb:SetFontObject(ChatFontNormal)
+        eb:SetWidth(450)
+        eb:SetScript("OnEscapePressed", function() f:Hide() end)
+        -- Keep the cursor in view while typing / pasting long text.
+        if ScrollingEdit_OnCursorChanged then
+            eb:SetScript("OnCursorChanged", ScrollingEdit_OnCursorChanged)
+            eb:SetScript("OnUpdate", function(self, elapsed) ScrollingEdit_OnUpdate(self, elapsed, sf) end)
+        end
+        sf:SetScrollChild(eb)
+        sf:HookScript("OnSizeChanged", function(_, w) eb:SetWidth(math.max(1, w or 1)) end)
+        -- Clicking anywhere in the box area focuses the edit box.
+        inset:EnableMouse(true)
+        inset:SetScript("OnMouseDown", function() eb:SetFocus() end)
+        f.edit = eb
+        f.accept = self:Button(f, "OK", 120, 24, function()
+            local text = f.edit:GetText() or ""
+            f:Hide()
+            if f.onAccept then f.onAccept(text) end
+        end)
+        f.accept:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -4, 12)
+        f.cancel = self:Button(f, "Cancel", 120, 24, function() f:Hide() end)
+        f.cancel:SetPoint("BOTTOMLEFT", f, "BOTTOM", 4, 12)
+        self.inputDialog = f
+    end
+    f.title:SetText(title)
+    f.hint:SetText(hint or "")
+    f.accept:SetText(acceptLabel or "OK")
+    f.onAccept = onAccept
+    f.edit:SetText("")
+    f:Show()
+    f.edit:SetFocus()
+end
+
+---------------------------------------------------------------------------
 -- Refresh plumbing: re-render shown windows on state changes (debounced).
 ---------------------------------------------------------------------------
 local refreshPending = false
@@ -501,6 +590,7 @@ end
 for _, event in ipairs({
     "SESSION_CHANGED", "RESERVES_CHANGED", "MY_RESERVES_CHANGED", "LOOT_LIST_CHANGED",
     "LOOT_ADDED", "ROLL_STARTED", "ROLL_UPDATED", "ROLL_ENDED", "RESERVE_REJECTED",
+    "ROSTER_CHANGED", "STATS_CHANGED",
 }) do
     Addon:On(event, function() UI:RefreshShown() end)
 end

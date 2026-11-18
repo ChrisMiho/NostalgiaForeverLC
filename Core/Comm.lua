@@ -7,10 +7,21 @@
 --   SET^<raidKey>^<h;s>           player -> raid   my full reserve set (leader validates)
 --   SYNC^seq^part^total^<blob>    leader -> raid   authoritative reserve list (chunked)
 --   REJ^itemID^kind^reason        leader -> whisper  a reserve was refused
+--   DROP^id^itemID^boss^run       leader -> raid   an item dropped (everyone's loot window); run = ledger run id
+--   LQ / LI / LR / LD             guild ledger sync, see Core/Ledger.lua
+--   UNDROP^id                     leader -> raid   that drop was removed again
+--   CLEAR                         leader -> raid   finished items cleared from the loot window
 --   ROLL^id^itemID^mode^names     leader -> raid   item is up; names = eligible (csv) or "*"
---   AWARD^id^itemID^winner        leader -> raid   leader decided who gets it
+--   AWARD^id^itemID^winner^mode   loot master -> raid   who gets it; mode = how decided, or DISENCHANT / BANK
+--   UNAWARD^id^itemID^winner^sp   loot master -> raid   that award was undone (sp = 1 for disenchant / bank)
+--   TRADED^id^0|1                 loot master -> raid   item handed over (or not after all)
+--   CLOSE^id                      loot master -> raid   no more rolls for that item
+-- Loot messages (DROP ... TRADED) come from the loot master: the raid leader
+-- or the assistant named in CFG.
 --   CANCEL^id                     leader -> raid   roll cancelled
 --   RESET                         leader -> raid   all reserves wiped
+--   PING                          leader -> raid   who has the addon? (everyone answers VER)
+--   VER^version                   anyone -> raid   my addon version
 --
 -- Sending is queued: the modern client throttles addon messages per prefix
 -- (~10 burst, +1/sec) and blocks them during boss encounters, so the queue
@@ -31,6 +42,21 @@ local REGEN = 1.0
 local queue = {}
 local tokens = BURST
 local ticker
+
+-- [name] = addon version, for everyone we have heard from. The raid leader's
+-- roster uses it to tell who has the addon installed.
+Comm.versions = {}
+
+local function heard(sender, version)
+    if not sender then return end
+    local old = Comm.versions[sender]
+    if version and version ~= "" then
+        Comm.versions[sender] = version
+    elseif not old then
+        Comm.versions[sender] = "?"
+    end
+    if Comm.versions[sender] ~= old then Addon:Fire("ROSTER_CHANGED") end
+end
 
 local function split(msg)
     local out = {}
@@ -89,9 +115,22 @@ function Comm:SendHello()
     self:Raid("HELLO", Addon.version)
 end
 
+function Comm:SendVersion()
+    self:Raid("VER", Addon.version)
+end
+
+-- Leader: ask every client to report its version (throttled unless forced).
+local lastPing = -100
+function Comm:SendPing(force)
+    if not IsInRaid() or not Addon:IsLeader() then return end
+    if not force and GetTime() - lastPing < 5 then return end
+    lastPing = GetTime()
+    self:Raid("PING")
+end
+
 function Comm:SendConfig()
     local s = Addon.session
-    self:Raid("CFG", Engine.EncodeSettings(s.settings, s.locked, s.raidKey))
+    self:Raid("CFG", Engine.EncodeSettings(s.settings, s.locked, s.raidKey, s.lootMaster))
 end
 
 function Comm:SendMyReserves(raidKey, hard, soft)
@@ -127,14 +166,27 @@ function Comm:SendReject(target, itemID, kind, reason)
     self:Whisper(target, "REJ", itemID or 0, kind or "", reason or "")
 end
 
-function Comm:SendRoll(id, itemID, mode, eligible)
-    local names = eligible and table.concat(eligible, ",") or "*"
+function Comm:SendDrop(id, itemID, boss, runUid)
+    self:Raid("DROP", id, itemID, ((boss or ""):gsub("%^", "")), runUid or "")
+end
+
+-- bonus = { [name] = n } (soft reserve bonus), sent as "Name:n".
+function Comm:SendRoll(id, itemID, mode, eligible, bonus)
+    local names = "*"
+    if eligible then
+        local parts = {}
+        for _, name in ipairs(eligible) do
+            local b = bonus and bonus[name]
+            parts[#parts + 1] = (b and b > 0) and (name .. ":" .. b) or name
+        end
+        names = table.concat(parts, ",")
+    end
     if #names > 180 then names = "+" end -- too many to list; clients just show the mode
     self:Raid("ROLL", id, itemID, mode, names)
 end
 
-function Comm:SendAward(id, itemID, winner)
-    self:Raid("AWARD", id, itemID, winner or "")
+function Comm:SendAward(id, itemID, winner, mode)
+    self:Raid("AWARD", id, itemID, winner or "", mode or "")
 end
 
 function Comm:SendCancel(id)
@@ -145,22 +197,36 @@ end
 -- Incoming
 ---------------------------------------------------------------------------
 local handlers = {}
+local RAID_ONLY -- message types that are only accepted over the raid channel (set below)
 local syncBuffer = { seq = nil, parts = {}, total = 0 }
 
 local function fromLeader(sender)
     return sender == Addon:GetLeaderName()
 end
 
-handlers.HELLO = function(sender)
-    if Addon:IsLeader() and sender ~= Addon:PlayerName() then
+handlers.HELLO = function(sender, args)
+    heard(sender, args[2])
+    if Addon:IsLeader() and sender ~= Addon:PlayerName() and Addon.session.approved then
         Comm:SendConfig()
         Comm:SendSync()
     end
 end
 
+local lastVersionSent = -100
+handlers.PING = function(sender)
+    if not fromLeader(sender) or sender == Addon:PlayerName() then return end
+    if GetTime() - lastVersionSent < 5 then return end
+    lastVersionSent = GetTime()
+    Comm:SendVersion()
+end
+
+handlers.VER = function(sender, args)
+    heard(sender, args[2])
+end
+
 handlers.CFG = function(sender, args)
     if not fromLeader(sender) or Addon:IsLeader() then return end
-    local settings, locked, raidKey = Engine.DecodeSettings(args[2])
+    local settings, locked, raidKey, lootMaster = Engine.DecodeSettings(args[2])
     if not settings then return end
     local s = Addon.session
     local old = {}
@@ -169,6 +235,8 @@ handlers.CFG = function(sender, args)
     s:SetSettings(settings)
     s:SetLocked(locked)
     s.raidKey = raidKey
+    s.approved = raidKey ~= nil -- the leader only sends rules once approved
+    s.lootMaster = lootMaster
     Addon:Fire("SESSION_CHANGED")
     -- Reserves module notifies the player and re-sends their selection.
     Addon:Fire("SETTINGS_CHANGED", old, s.settings, oldRaid, raidKey, oldLocked, locked)
@@ -219,20 +287,81 @@ handlers.REJ = function(sender, args)
     Addon:Print("|cffff5555Reserve rejected|r %s %s: %s", link, kind or "", reason or "")
 end
 
+local function fromLoot(sender)
+    return sender == Addon:GetLootMasterName()
+end
+
+handlers.DROP = function(sender, args)
+    if not fromLoot(sender) then return end
+    ns.Loot:OnRemoteDrop(tonumber(args[2]), tonumber(args[3]), args[4], args[5])
+end
+
+-- Guild ledger sync. Who may send what is checked in Core/Ledger.lua.
+handlers.LQ = function(sender, _, channel)
+    if channel ~= "GUILD" then return end
+    ns.Ledger:OnQuery(sender)
+end
+
+handlers.LI = function(sender, args, channel)
+    if channel ~= "WHISPER" then return end
+    ns.Ledger:OnIndex(sender, args[2], tonumber(args[3]), tonumber(args[4]), tonumber(args[5]))
+end
+
+handlers.LR = function(sender, args, channel)
+    if channel ~= "WHISPER" then return end
+    ns.Ledger:OnRequest(sender, args[2])
+end
+
+handlers.LD = function(sender, args, channel)
+    if channel ~= "WHISPER" then return end
+    ns.Ledger:OnData(sender, args[2], tonumber(args[3]), tonumber(args[4]), tonumber(args[5]), args[6])
+end
+
+handlers.UNDROP = function(sender, args)
+    if not fromLoot(sender) then return end
+    ns.Loot:OnRemoteUndrop(tonumber(args[2]))
+end
+
+handlers.CLEAR = function(sender)
+    if not fromLoot(sender) or Addon:IsLootMaster() then return end
+    ns.Loot:ClearDone()
+end
+
 handlers.ROLL = function(sender, args)
-    if not fromLeader(sender) then return end
+    if not fromLoot(sender) then return end
     ns.Loot:OnRemoteRoll(tonumber(args[2]), tonumber(args[3]), args[4], args[5])
 end
 
 handlers.AWARD = function(sender, args)
-    if not fromLeader(sender) then return end
-    ns.Loot:OnRemoteAward(tonumber(args[2]), tonumber(args[3]), args[4])
+    if not fromLoot(sender) then return end
+    ns.Loot:OnRemoteAward(tonumber(args[2]), tonumber(args[3]), args[4], args[5] ~= "" and args[5] or nil)
+end
+
+handlers.UNAWARD = function(sender, args)
+    if not fromLoot(sender) then return end
+    ns.Loot:OnRemoteUnaward(tonumber(args[2]), tonumber(args[3]), args[4], args[5] == "1")
+end
+
+handlers.CLOSE = function(sender, args)
+    if not fromLoot(sender) then return end
+    ns.Loot:OnRemoteClose(tonumber(args[2]))
+end
+
+handlers.TRADED = function(sender, args)
+    if not fromLoot(sender) then return end
+    ns.Loot:OnRemoteTraded(tonumber(args[2]), args[3] == "1")
 end
 
 handlers.CANCEL = function(sender, args)
-    if not fromLeader(sender) then return end
+    if not fromLoot(sender) then return end
     ns.Loot:OnRemoteCancel(tonumber(args[2]))
 end
+
+RAID_ONLY = {
+    HELLO = true, PING = true, VER = true, CFG = true, SET = true, SYNC = true, RESET = true,
+    DROP = true, UNDROP = true, CLEAR = true, ROLL = true, CLOSE = true, AWARD = true, UNAWARD = true,
+    TRADED = true, CANCEL = true,
+}
 
 Addon:OnInit(function()
     if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
@@ -251,6 +380,10 @@ Addon:RegisterEvent("CHAT_MSG_ADDON", function(self, _, prefix, msg, channel, se
     if prefix ~= Addon.PREFIX then return end
     sender = self:NormalizeName(sender)
     local args = split(msg)
+    if channel == "RAID" then heard(sender) end -- any raid message means they run the addon
+    -- Raid business only counts when the whole raid can see it: a whispered
+    -- AWARD or CFG must not be able to change anything.
+    if RAID_ONLY[args[1]] and channel ~= "RAID" then return end
     local handler = handlers[args[1]]
     if handler then handler(sender, args, channel) end
 end)
@@ -259,7 +392,9 @@ end)
 local lastHello = 0
 Addon:RegisterEvent("GROUP_ROSTER_UPDATE", function(self)
     if not IsInRaid() then return end
-    if GetTime() - lastHello > 10 and not self:IsLeader() then
+    if self:IsLeader() then
+        Comm:SendPing() -- new members may have joined (throttled)
+    elseif GetTime() - lastHello > 10 then
         lastHello = GetTime()
         Comm:SendHello()
     end
