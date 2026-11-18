@@ -119,11 +119,11 @@ local plate = {} -- item ids the mock treats as plate armor
 G.GetItemInfoInstant = function(id) return id, "Armor", "Cloth", equip[id] or "", 134400, 4, plate[id] and 4 or 1 end
 
 local ns = {}
-local files = { "Core/Engine.lua", "Core/Init.lua", "Data/Raids.lua", "Data/Forever.lua", "Data/RaidMeta.lua",
-    "Core/RaidDataAPI.lua", "Core/Stats.lua", "Core/Comm.lua", "Core/Reserves.lua", "Core/Roster.lua", "Core/Ledger.lua",
-    "Core/Loot.lua", "Core/Slash.lua",
-    "UI/Widgets.lua", "UI/MainFrame.lua", "UI/RaidList.lua", "UI/RaidView.lua", "UI/RosterPanel.lua",
-    "UI/LedgerPanel.lua", "UI/SettingsPanel.lua", "UI/ApprovePopup.lua", "UI/LootFrame.lua", "UI/RollPopup.lua", "UI/Tooltip.lua" }
+local files = {}
+for line in io.lines(ROOT .. "/IDontWannaLC.toc") do
+    line = line:gsub("\r", "")
+    if line ~= "" and line:sub(1, 1) ~= "#" then files[#files + 1] = (line:gsub("\\", "/")) end
+end
 for _, f in ipairs(files) do
     local chunk = assert(loadfile(ROOT .. "/" .. f))
     chunk("IDontWannaLC", ns)

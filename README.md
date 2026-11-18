@@ -144,9 +144,10 @@ docs/superpowers/plans  Implementation plans written against the PRD
 ## Development
 
 ```bash
-luajit tests/run.lua
-luajit tests/smoke.lua .
+bash scripts/check.sh
 ```
+
+This runs the same checks CI runs: a parse check, a `.toc` completeness check, the unit tests and the UI smoke test.
 
 To install, copy or symlink this folder into `World of Warcraft/_forever_/Interface/AddOns/IDontWannaLC` (or `_classic_era_` for testing).
 
