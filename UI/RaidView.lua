@@ -301,7 +301,7 @@ end
 local function updateItemRow(row, d, index)
     local isHeader = d.header ~= nil
     row.header:SetShown(isHeader)
-    row.headerLine:SetShown(isHeader)
+    row.headerLine:SetShown(isHeader and not d.muted)
     row.item:SetShown(not isHeader)
     row.sub:SetShown(not isHeader)
     if isHeader then
@@ -310,7 +310,11 @@ local function updateItemRow(row, d, index)
         row.hr:Hide()
         row.sr:Hide()
         row.status:Hide()
-        row.header:SetText(("%s |cff808080(%d)|r"):format(d.header, d.count))
+        if d.muted then -- a note, not a gear slot: grey like EMPTY_TEXT
+            row.header:SetText(UI.Color(UI.GREY, ("%s (%d)"):format(d.header, d.count)))
+        else
+            row.header:SetText(("%s |cff808080(%d)|r"):format(d.header, d.count))
+        end
         return
     end
     row.itemID = d.itemID
@@ -510,7 +514,7 @@ local function refresh(self)
     local boss = bosses[selectedBoss]
     local rows, hidden = RaidData:GetLootRows(boss)
     if hidden > 0 and #rows > 0 then
-        rows[#rows + 1] = { header = "Not out yet on this client", count = hidden }
+        rows[#rows + 1] = { header = "Not out yet on this client", count = hidden, muted = true }
     end
     self.itemList:SetData(rows)
     self.empty:SetText(#rows == 0 and hidden > 0 and NOT_OUT_TEXT or EMPTY_TEXT)

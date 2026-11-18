@@ -338,6 +338,29 @@ do
     check(hiddenCount() == 0, "availability clears on a later success")
     UI:RefreshShown(); runTimers()
     check(not rf.empty:IsShown() and not has(lootDump(), "Not out yet"), "rows come back once available")
+    -- Refused after its first ask, before the retry: asked exactly once.
+    local oddID = 123456
+    UI.PreloadItems({ oddID }) -- asked at once; the retry is still on a timer
+    event("GET_ITEM_INFO_RECEIVED", oddID, false); runTimers()
+    local askedOdd = 0
+    for _, r in ipairs(itemRequests) do if r.id == oddID then askedOdd = askedOdd + 1 end end
+    check(askedOdd == 1, "refused before its retry: asked once (R8a, R8b) (asked " .. askedOdd .. ")")
+    event("GET_ITEM_INFO_RECEIVED", oddID, true); runTimers()
+    -- The not-out footer is grey, ordinary slot headers keep the gold header style.
+    for _, id in ipairs({ 17109, 16863 }) do event("GET_ITEM_INFO_RECEIVED", id, false) end
+    UI:RefreshShown(); runTimers()
+    local footer, slot
+    for _, r in ipairs(liveRows(rf.itemList)) do
+        if r.data.header then
+            if has(r.header._text, "Not out yet") then footer = r else slot = slot or r end
+        end
+    end
+    check(footer and slot and has(footer.header._text, "|cff808080Not out yet")
+        and not has(slot.header._text, "|cff808080" .. slot.data.header)
+        and footer.headerLine._shown == false and slot.headerLine._shown ~= false,
+        "not-out footer drawn grey, slot headers unchanged")
+    for _, id in ipairs({ 17109, 16863 }) do event("GET_ITEM_INFO_RECEIVED", id, true) end
+    runTimers()
     event("PLAYER_LOGOUT")
     check(not G.NostalgiaForeverLCDB.unavailableItems and not G.NostalgiaForeverLCCharDB.unavailableItems, "unavailable set is not saved")
 end
