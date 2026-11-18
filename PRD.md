@@ -1,4 +1,4 @@
-# I Don't Wanna LC — Product Requirements
+# Nostalgia Forever LC — Product Requirements
 
 Status: **active spec** (2026-11-17). This document is the source of truth for scope. Code, tests and the README follow it; when they disagree, this wins. Change the PRD first, then the code.
 
@@ -22,7 +22,7 @@ Each requirement has an ID so plans, tests and commits can refer to it.
 
 ### 3.1 Raid list (home screen)
 
-- **R1** Opening the addon (`/idwlc`, `/reserve`) shows the **Raids** tab: a vertical stack of wide, horizontal raid cards, one per raid available on this client.
+- **R1** Opening the addon (`/nflc`, `/reserve`; `/idwlc` kept as an alias) shows the **Raids** tab: a vertical stack of wide, horizontal raid cards, one per raid available on this client.
 - **R2** Each card shows: the raid name, a graphic unique to that raid, raid size, lockout progress as `X/N` bosses, how many times this character has cleared it, the date of the last boss kill, and how many HR/SR picks the player has saved for it.
 - **R3** The raid the leader is currently running is marked **LIVE**, listed first, and shows the approved counts and lock state.
 - **R4** Clicking a card opens that raid's catalogue (3.2). A Back button returns to the list.
@@ -76,7 +76,7 @@ Each requirement has an ID so plans, tests and commits can refer to it.
 
 - **R32** When loot drops, the leader's client resolves each item: restricted → leader decides; hard reserved → hard reservers only (single reserver wins without a roll); soft reserved → soft reservers roll; otherwise open roll. Roll lists come from the active reserves (R14, R21).
 - **R33** A **loot window pops up for everyone in the raid** when loot drops (after the fight if it arrives mid-encounter). It lists every drop under the boss it came from, with who may roll for each item according to the hard and soft reserves.
-- **R33a** The loot window must **never block play**. It can be closed at any time (X or Esc) while loot is still being handled, and once closed it stays closed for that batch of loot: further drops and rolls do not reopen it (a chat line points to `/idwlc loot`). It never opens during combat; it waits until the player is out of combat. With the window closed, a player is only interrupted by a small roll popup for items they can actually roll on. The window opens by itself again only after the current loot has all been handed out.
+- **R33a** The loot window must **never block play**. It can be closed at any time (X or Esc) while loot is still being handled, and once closed it stays closed for that batch of loot: further drops and rolls do not reopen it (a chat line points to `/nflc loot`). It never opens during combat; it waits until the player is out of combat. With the window closed, a player is only interrupted by a small roll popup for items they can actually roll on. The window opens by itself again only after the current loot has all been handed out.
 - **R34** The raid leader starts a roll per item. The window shows the rolls as they come in, for everyone: valid rolls ranked, ineligible or repeated rolls ignored, ties re-rolled. Eligible raiders get a Roll button.
 - **R35** The raid leader hands the item out **by hand** and presses Award (the suggested winner, or anyone for restricted items and overrides). Only the leader has roll and award controls. The award is **announced in raid chat**. Winning an item consumes that reserve and removes it from the winner's list.
 - **R36** Loot tracking runs only in a raid group inside a raid instance.
@@ -143,7 +143,7 @@ Policy defaults below are settings in **Settings > Master Loot** unless stated o
 - Lua 5.1, WoW addon API only, no libraries. Must load on interface `16001` (WoW Forever), `11509` (Classic Era, for testing) and `20506`.
 - `Core/Engine.lua` stays free of WoW API calls and is unit tested with `luajit tests/run.lua`.
 - UI is covered by `luajit tests/smoke.lua .` against a mock WoW API. Both must pass in CI.
-- Addon messages are under 255 bytes, `^`-separated, prefix `IDWLC`.
+- Addon messages are under 255 bytes, `^`-separated, prefix `NFLC`.
 
 ## 6. Open questions
 
