@@ -113,7 +113,7 @@ Saved account wide. Used the next time you approve counts for a raid; the counts
 
 ```
 PRD.md                  Product requirements (source of truth for scope)
-NostalgiaForeverLC.toc        Addon manifest (Forever 16001, Classic Era 11509, TBC Anniversary 20506)
+NostalgiaForeverLC.toc  Addon manifest (Forever 16001, Classic Era 11509, TBC Anniversary 20506)
 Core/Engine.lua         Pure rules: reserves, resolve, rolls, slot groups, roster status, stats. No WoW API, unit tested
 Core/Init.lua           Namespace, SavedVariables, events, API compatibility, internal callbacks
 Core/Comm.lua           Addon-message protocol, throttled queue, pauses during boss encounters
@@ -151,7 +151,7 @@ This runs the same checks CI runs: a parse check, a `.toc` completeness check, t
 
 To install, copy or symlink this folder into `World of Warcraft/_forever_/Interface/AddOns/NostalgiaForeverLC` (or `_classic_era_` for testing).
 
-Upgrading from IDontWannaLC: saved settings, reserves and ledger history are not carried over.
+Upgrading from IDontWannaLC: saved settings, reserves and ledger history are not carried over. Delete the old `Interface/AddOns/IDontWannaLC` folder, otherwise both addons load and double-announce in raid chat. The install folder must be named `NostalgiaForeverLC` (re-point any symlink), because the client requires the folder name to match the `.toc`.
 
 ## Known gaps / next steps
 

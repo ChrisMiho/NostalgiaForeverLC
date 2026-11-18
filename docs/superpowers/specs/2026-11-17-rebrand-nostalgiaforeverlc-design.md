@@ -38,4 +38,4 @@ The guild wants the addon called NostalgiaForeverLC. The addon is still a proof 
 The order follows CLAUDE.md: PRD first, then code, tests, README, CLAUDE.md and `.claude/rules`.
 
 ## Done
-`scripts/check.sh` passes. A grep for `IDontWanna|IDWLC` finds only the historical plan docs, the `/idwlc` alias, and this spec.
+`scripts/check.sh` passes. A grep for `IDontWanna|IDWLC` finds only the historical plan docs, the `/idwlc` alias (also documented in PRD R1 and the README slash table), the README upgrade note, and this spec.
