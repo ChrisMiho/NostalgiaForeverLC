@@ -4,7 +4,7 @@
 ## Author: ChrisMiho
 ## Version: @project-version@
 ## X-Website: https://github.com/ChrisMiho/NostalgiaForeverLC
-## X-License: GPL-3.0
+## X-License: GPL-2.0-or-later
 ## SavedVariables: NostalgiaForeverLCDB
 ## SavedVariablesPerCharacter: NostalgiaForeverLCCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Dice_02

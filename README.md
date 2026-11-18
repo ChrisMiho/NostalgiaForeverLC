@@ -184,4 +184,6 @@ CurseForge uploads need the `CF_API_KEY` secret and `## X-Curse-Project-ID` in t
 
 ## License
 
-Copyright (C) 2026 ChrisMiho. GNU General Public License v3.0; see [LICENSE](LICENSE).
+Copyright (C) 2026 ChrisMiho. This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
+
+The classic raid loot tables in `Data/Raids.lua` are generated from [AtlasLootClassic](https://github.com/Hoizame/AtlasLootClassic) by Hoizame and contributors, as packaged in AtlasLoot Classic Forever by Sliccer, both GNU GPL v2.
