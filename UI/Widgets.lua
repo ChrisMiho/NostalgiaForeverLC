@@ -49,6 +49,76 @@ function UI.ItemInfo(itemID)
     return name, link, quality, icon or QUESTION_MARK
 end
 
+-- Ask the server for items the client has not cached, PRELOAD_BATCH per tick
+-- so its request limit drops none, then once more for any still missing (R8a).
+-- Answers arrive as GET_ITEM_INFO_RECEIVED, which refreshes shown windows.
+UI.PRELOAD_BATCH = 15
+local PRELOAD_TICK, PRELOAD_RETRY = 0.2, 3
+local preloadQueue, preloadQueued, preloadRunning = {}, {}, false
+
+local function isCached(id)
+    if C_Item and C_Item.IsItemDataCachedByID then return C_Item.IsItemDataCachedByID(id) end
+    return Addon:GetItemInfo(id) ~= nil
+end
+
+local function request(id)
+    if C_Item and C_Item.RequestLoadItemDataByID then
+        C_Item.RequestLoadItemDataByID(id)
+    else
+        Addon:GetItemInfo(id) -- an uncached lookup also asks the server
+    end
+end
+
+local preloadStep
+
+local function retry(ids)
+    for _, id in ipairs(ids) do
+        if isCached(id) then
+            preloadQueued[id] = nil
+        else
+            table.insert(preloadQueue, { id = id, pass = 2 })
+        end
+    end
+    if not preloadRunning and #preloadQueue > 0 then preloadRunning = true; preloadStep() end
+end
+
+function preloadStep()
+    local n, firstPass = 0, {}
+    while n < UI.PRELOAD_BATCH and #preloadQueue > 0 do
+        local entry = table.remove(preloadQueue, 1)
+        if isCached(entry.id) then
+            preloadQueued[entry.id] = nil
+        else
+            request(entry.id)
+            n = n + 1
+            if entry.pass == 1 then
+                firstPass[#firstPass + 1] = entry.id
+            else
+                preloadQueued[entry.id] = nil -- asked twice: a later PreloadItems may ask again
+            end
+        end
+    end
+    if #firstPass > 0 then C_Timer.After(PRELOAD_RETRY, function() retry(firstPass) end) end
+    if #preloadQueue > 0 then
+        C_Timer.After(PRELOAD_TICK, preloadStep)
+    else
+        preloadRunning = false
+    end
+end
+
+function UI.PreloadItems(ids)
+    for _, id in ipairs(ids) do
+        if not preloadQueued[id] and not isCached(id) then
+            preloadQueued[id] = true
+            table.insert(preloadQueue, { id = id, pass = 1 })
+        end
+    end
+    if not preloadRunning and #preloadQueue > 0 then
+        preloadRunning = true
+        preloadStep()
+    end
+end
+
 function UI.QualityRGB(quality)
     local c = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
     if c then return c.r, c.g, c.b end
@@ -222,6 +292,13 @@ Addon:RegisterEvent("MODIFIER_STATE_CHANGED", function()
     else
         hoveredItem = nil
     end
+end)
+
+-- The item under the mouse was still "Retrieving item information": redraw
+-- its tooltip now that the item has arrived (R8a).
+Addon:RegisterEvent("GET_ITEM_INFO_RECEIVED", function(_, _, itemID)
+    local b = hoveredItem
+    if b and b.itemID == itemID and GameTooltip:GetOwner() == b then itemOnEnter(b) end
 end)
 
 -- Behaves like a linked item: shift-click puts the link in chat (or one of

@@ -33,6 +33,7 @@ Each requirement has an ID so plans, tests and commits can refer to it.
 - **R6** The catalogue lists the raid's bosses. Clicking a boss shows the gear it drops.
 - **R7** Loot is grouped by gear slot in a fixed order — Head, Neck, Shoulder, Back, Chest, Wrist, Hands, Waist, Legs, Feet, Finger, Trinket, Weapon, Off-hand, Ranged — followed by **Misc / Quest** for everything else.
 - **R8** Each item shows its icon and quality-coloured name. Hovering shows the standard item tooltip. Items behave like linked gear: shift-click links to chat, ctrl-click previews in the dressing room, shift-hover compares with equipped gear.
+- **R8a** Items the client has not cached yet fill in on their own. Opening a raid's catalogue asks the server for all of that raid's items in small batches (so the server's request limit does not drop any), and asks once more for any still missing. A tooltip that is open while "Retrieving item information" is replaced by the real tooltip as soon as the item arrives.
 - **R9** Raids whose loot table is not known yet (new Forever raids) learn items as they drop; a link box lets players add any item by shift-clicking its link.
 
 ### 3.3 Reserve lists

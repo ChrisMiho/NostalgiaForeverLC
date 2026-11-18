@@ -1,8 +1,10 @@
 -- Smoke test: load Core + UI with a permissive WoW mock and exercise the UI.
 local ROOT = arg[1]
 local timers = {}
+local round = 0 -- counts timer rounds, so tests can see what happened per tick
 local function runTimers()
     for _ = 1, 5 do
+        round = round + 1
         local t = timers; timers = {}
         for _, fn in ipairs(t) do fn() end
     end
@@ -40,6 +42,7 @@ function methods:SetEnabled(v) assert(v == true or v == false, "SetEnabled needs
 function methods:Click(btn) if self._scripts.OnClick then self._scripts.OnClick(self, btn or "LeftButton") end end
 frameMT = { __index = function(t, k)
     if methods[k] then return methods[k] end
+    if k == "link" then return nil end -- addon data field on item buttons, nil until set, as in the game
     return function() end
 end }
 
@@ -60,6 +63,10 @@ G.C_Timer = {
     NewTicker = function() return { Cancel = function() end } end,
 }
 G.GameTooltip = newObj("GameTooltip")
+G.GameTooltip._links, G.GameTooltip._owner, G.GameTooltip._link = 0, false, ""
+G.GameTooltip.SetOwner = function(self, owner) self._owner = owner end
+G.GameTooltip.GetOwner = function(self) return self._owner end
+G.GameTooltip.SetHyperlink = function(self, link) self._links = (self._links or 0) + 1; self._link = link end
 G.GameTooltip_Hide = function() end
 G.hooksecurefunc = function(a, b, c)
     if type(a) == "string" then local old = G[a]; G[a] = function(...) local r = old(...); b(...); return r end
@@ -85,6 +92,11 @@ G.GetItemInfo = function(id)
     return c[1], "|cffa335ee|Hitem:" .. id .. "::::|h[" .. c[1] .. "]|h|r", c[2], 60, 60, "Armor", "Cloth", 1, "INVTYPE_FEET", 12345
 end
 G.GetItemIcon = function() return 134400 end
+local itemRequests = {} -- { id, round } per server request (R8a)
+G.C_Item = {
+    IsItemDataCachedByID = function(id) return cache[id] ~= nil end,
+    RequestLoadItemDataByID = function(id) itemRequests[#itemRequests + 1] = { id = id, round = round } end,
+}
 G.ITEM_QUALITY_COLORS = {}
 for q = 0, 7 do G.ITEM_QUALITY_COLORS[q] = { r = 1, g = 0.5, b = 0 } end
 G.RAID_CLASS_COLORS = { WARRIOR = { r = 0.78, g = 0.61, b = 0.43 } }
@@ -241,6 +253,29 @@ check(cards[2].data.key ~= "MC" and cards[2].tag._text == "", "other raids are n
 cards[1]:Click(); runTimers()
 check(rf:IsShown() and not rl:IsShown() and rf.title._text == "Molten Core", "clicking a card opens its catalogue")
 check(has(rf.raidNote._text, "Live raid"), "live raid note: " .. rf.raidNote._text)
+
+-- R8a: opening the catalogue asks for every uncached item, a few per tick, and retries once.
+do
+    runTimers(); runTimers(); runTimers(); runTimers(); runTimers(); runTimers()
+    local want, perRound, asked = {}, {}, {}
+    for _, boss in ipairs(RDA:GetBosses("MC")) do
+        for _, id in ipairs(boss.items) do want[id] = true end
+    end
+    for _, r in ipairs(itemRequests) do
+        asked[r.id] = (asked[r.id] or 0) + 1
+        perRound[r.round] = (perRound[r.round] or 0) + 1
+    end
+    local missing, maxRound, extra = 0, 0, 0
+    for id in pairs(want) do
+        if cache[id] then
+            if asked[id] then extra = extra + 1 end
+        elseif asked[id] ~= 2 then missing = missing + 1 end
+    end
+    for _, n in pairs(perRound) do maxRound = math.max(maxRound, n) end
+    check(#itemRequests > 0 and missing == 0, "every uncached MC item requested, then retried once (missing " .. missing .. ")")
+    check(extra == 0, "cached items are not requested")
+    check(maxRound <= UI.PRELOAD_BATCH, "item requests batched: " .. maxRound .. " in one tick")
+end
 local hardCol, softCol = rf.columns.hard, rf.columns.soft
 local function lootDump()
     local out = {}
@@ -256,6 +291,20 @@ local function itemRow(id)
         if r.itemID == id then return r end
     end
     error("no row for item " .. id)
+end
+-- R8a: a tooltip opened while the item was still loading is redrawn when it arrives.
+do
+    local row = itemRow(16805)
+    row.item._scripts.OnEnter(row.item)
+    local tt = G.GameTooltip
+    local before = tt._links
+    event("GET_ITEM_INFO_RECEIVED", 99999, true); runTimers()
+    check(tt._links == before, "tooltip left alone when another item arrives")
+    event("GET_ITEM_INFO_RECEIVED", 16805, true); runTimers()
+    check(tt._links == before + 1 and has(tt._link, "item:16805"), "hovered tooltip redrawn when its item arrives")
+    row.item._scripts.OnLeave(row.item)
+    event("GET_ITEM_INFO_RECEIVED", 16805, true); runTimers()
+    check(tt._links == before + 1, "no redraw after the mouse leaves")
 end
 local bosses = liveRows(rf.bossList)
 check(#bosses == 11 and has(bosses[1].text._text, "Lucifron"), "boss catalogue listed")

@@ -104,6 +104,12 @@ end
 -- Open a raid's catalogue / back to the raid cards.
 function UI:OpenRaid(raidKey)
     UI.raidViewKey = raidKey
+    -- Fetch the whole raid's items now, not one by one as rows are drawn (R8a).
+    local ids = {}
+    for _, boss in ipairs(raidKey and ns.RaidDataAPI:GetBosses(raidKey) or {}) do
+        for _, id in ipairs(boss.items) do ids[#ids + 1] = id end
+    end
+    UI.PreloadItems(ids)
     UI:ShowMain("raids")
 end
 
