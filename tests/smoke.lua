@@ -323,8 +323,21 @@ do
     local fn = G.C_Item.DoesItemExistByID; G.C_Item.DoesItemExistByID = nil
     check(not Addon:IsItemUnavailable(16800) and Addon:IsItemUnavailable(16863), "no DoesItemExistByID: only refusals count")
     G.C_Item.DoesItemExistByID = fn; notOut[16800] = nil
+    local wishBefore = table.concat(R:GetWishlist("MC").hard, ",") .. "|" .. table.concat(R:GetWishlist("MC").soft, ",")
+    UI:RefreshShown(); runTimers()
+    check(lootDump() == "Hands (1) 16805 Legs (1) 18875 Feet (4) 16800 16829 16837 16859 Not out yet on this client (2)",
+        "partial boss ends with the not-out line: " .. lootDump())
+    for _, id in ipairs(RDA:GetBosses("MC")[1].items) do notOut[id] = true end
+    UI:RefreshShown(); runTimers()
+    check(#liveRows(rf.itemList) == 0 and rf.empty:IsShown() and has(rf.empty._text, "isn't out on this client yet"),
+        "whole boss shows the not-out note")
+    for _, id in ipairs(RDA:GetBosses("MC")[1].items) do notOut[id] = nil end
+    check(table.concat(R:GetWishlist("MC").hard, ",") .. "|" .. table.concat(R:GetWishlist("MC").soft, ",") == wishBefore,
+        "wishlist unchanged when its items go missing")
     event("GET_ITEM_INFO_RECEIVED", 17109, true); event("GET_ITEM_INFO_RECEIVED", 16863, true); runTimers()
     check(hiddenCount() == 0, "availability clears on a later success")
+    UI:RefreshShown(); runTimers()
+    check(not rf.empty:IsShown() and not has(lootDump(), "Not out yet"), "rows come back once available")
     event("PLAYER_LOGOUT")
     check(not G.NostalgiaForeverLCDB.unavailableItems and not G.NostalgiaForeverLCCharDB.unavailableItems, "unavailable set is not saved")
 end

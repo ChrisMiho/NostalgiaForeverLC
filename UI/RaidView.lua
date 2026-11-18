@@ -19,6 +19,7 @@ local PICK_BUTTON_W = 60
 local BANNER_SECONDS = 15
 local ACTIVE_COLOR, STANDBY_COLOR, LOCKED_COLOR = "40ff40", "a0a0a0", "ff4040"
 local EMPTY_TEXT = "No loot known for this raid yet - items are learned as they drop.\nShift-click an item link to add it to your list."
+local NOT_OUT_TEXT = "This raid's loot isn't out on this client yet. It appears here on its own once it is."
 
 local frame
 local shownKey         -- raid the boss selection belongs to
@@ -507,8 +508,12 @@ local function refresh(self)
     if selectedBoss > #bosses then selectedBoss = 1 end
     self.bossList:SetData(bosses)
     local boss = bosses[selectedBoss]
-    local rows = RaidData:GetLootRows(boss)
+    local rows, hidden = RaidData:GetLootRows(boss)
+    if hidden > 0 and #rows > 0 then
+        rows[#rows + 1] = { header = "Not out yet on this client", count = hidden }
+    end
     self.itemList:SetData(rows)
+    self.empty:SetText(#rows == 0 and hidden > 0 and NOT_OUT_TEXT or EMPTY_TEXT)
     self.empty:SetShown(#rows == 0)
 
     -- Shift-click box.
