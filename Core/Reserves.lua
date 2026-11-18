@@ -1,4 +1,4 @@
--- IDontWannaLC - Reserves
+-- NostalgiaForeverLC - Reserves
 --
 -- Players: keep a tiered (ordered) wishlist of hard and soft picks for every
 -- raid, built ahead of time from the raid catalogue. When they are in a raid,
@@ -281,7 +281,7 @@ function Reserves:ShortfallText()
     if Addon.session.locked then
         return ("Reserves are locked - you could have used %s reserve(s)."):format(what)
     end
-    return ("Your lists are short: you can still add %s reserve(s) - /idwlc."):format(what)
+    return ("Your lists are short: you can still add %s reserve(s) - /nflc."):format(what)
 end
 
 -- Tell the player (chat + on-screen notice) that slots are going unused.
@@ -290,7 +290,7 @@ function Reserves:WarnShortfall()
     if not text then return false end
     Addon:Print("|cffff9933%s|r", text)
     if not Addon.session.locked and RaidNotice_AddMessage and RaidWarningFrame then
-        RaidNotice_AddMessage(RaidWarningFrame, "IDWLC: " .. text,
+        RaidNotice_AddMessage(RaidWarningFrame, "NFLC: " .. text,
             ChatTypeInfo and ChatTypeInfo.RAID_WARNING or { r = 1, g = 0.5, b = 0 })
     end
     return true
@@ -340,7 +340,7 @@ Addon:On("SETTINGS_CHANGED", function(old, new, oldRaid, newRaid, oldLocked, new
         end
         Addon:Fire("RULES_NOTICE", msg)
         if RaidNotice_AddMessage and RaidWarningFrame then
-            RaidNotice_AddMessage(RaidWarningFrame, "IDWLC: reserve rules changed - check /idwlc",
+            RaidNotice_AddMessage(RaidWarningFrame, "NFLC: reserve rules changed - check /nflc",
                 ChatTypeInfo and ChatTypeInfo.RAID_WARNING or { r = 1, g = 0.5, b = 0 })
         end
     end
@@ -403,7 +403,7 @@ function Reserves:GetProposal(raidKey)
 end
 
 local function announceNow(text)
-    if IsInRaid() then Addon:SendChat("[IDWLC] " .. text, "RAID") end
+    if IsInRaid() then Addon:SendChat("[NFLC] " .. text, "RAID") end
 end
 
 -- Announce the rules in raid chat (debounced so repeated changes don't spam).
@@ -414,7 +414,7 @@ function Reserves:AnnounceRules()
         announceTimer = nil
         local s = Addon.session
         if not s.approved then return end
-        announceNow(("%s: %d hard / %d soft reserves per player%s. Reserves are %s - /idwlc to pick."):format(
+        announceNow(("%s: %d hard / %d soft reserves per player%s. Reserves are %s - /nflc to pick."):format(
             ns.RaidDataAPI:GetName(s.raidKey), s.settings.hardReserves, s.settings.softReserves,
             s.settings.allowDoubleSoft and ", double SR allowed" or "",
             s.locked and "LOCKED" or "open"))
@@ -588,7 +588,7 @@ function Reserves:LeaderSetLocked(locked)
         announceNow(("Reserves for %s are now LOCKED by the raid leader. Lists can no longer be changed."):format(
             ns.RaidDataAPI:GetName(s.raidKey)))
     else
-        announceNow(("Reserves for %s were UNLOCKED by the raid leader. You can change your lists again (/idwlc)."):format(
+        announceNow(("Reserves for %s were UNLOCKED by the raid leader. You can change your lists again (/nflc)."):format(
             ns.RaidDataAPI:GetName(s.raidKey)))
         lastPushed = nil
         self:Push()
@@ -734,7 +734,7 @@ end)
 -- First pull with reserves still open: nudge the leader (nothing is forced).
 Addon:RegisterEvent("ENCOUNTER_START", function(self)
     if Reserves:IsRaidLeader() and self.session.approved and not self.session.locked then
-        self:Print("Reserves are still |cff55ff55open|r - lock them from the Roster tab (/idwlc roster) if picks should be final.")
+        self:Print("Reserves are still |cff55ff55open|r - lock them from the Roster tab (/nflc roster) if picks should be final.")
     end
 end)
 
@@ -772,7 +772,7 @@ function Reserves:LeaderSetLootMaster(name)
     end
     if s.lootMaster == member then return false end
     s.lootMaster = member
-    Addon:SendChat(("[IDWLC] Loot is now run by %s."):format(member or (Addon:PlayerName() .. " (raid leader)")), "RAID")
+    Addon:SendChat(("[NFLC] Loot is now run by %s."):format(member or (Addon:PlayerName() .. " (raid leader)")), "RAID")
     self:LeaderBroadcast(false)
     return true
 end
@@ -845,7 +845,7 @@ function Reserves:LeaderImport(text)
         end
     end
     if #applied > 0 then
-        Addon:SendChat(("[IDWLC] The raid leader entered reserves for players without the addon: %s."):format(
+        Addon:SendChat(("[NFLC] The raid leader entered reserves for players without the addon: %s."):format(
             table.concat(applied, ", ")), "RAID")
     end
     return applied, skipped

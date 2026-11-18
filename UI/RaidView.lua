@@ -1,4 +1,4 @@
--- IDontWannaLC - Raid catalogue (Raids tab, after clicking a raid card)
+-- NostalgiaForeverLC - Raid catalogue (Raids tab, after clicking a raid card)
 -- Bosses on the left; click one to see its loot grouped by gear slot, with
 -- everything that isn't gear under "Misc / Quest". Every item has HR / SR
 -- buttons that put it on your hard or soft list for this raid. The lists
@@ -29,8 +29,8 @@ local bannerTimer
 local pendingClearKey  -- raid whose list the "Clear list" popup will clear
 local pendingNotice    -- rules notice that arrived during a boss encounter
 
-StaticPopupDialogs["IDWLC_CLEAR_WISHLIST"] = {
-    text = "I Don't Wanna LC:\nClear both of your reserve lists (hard and soft) for %s?",
+StaticPopupDialogs["NFLC_CLEAR_WISHLIST"] = {
+    text = "Nostalgia Forever LC:\nClear both of your reserve lists (hard and soft) for %s?",
     button1 = YES,
     button2 = NO,
     OnAccept = function()
@@ -639,7 +639,7 @@ function UI:CreateRaidView(parent)
         local key = currentKey()
         if not key then return end
         pendingClearKey = key
-        StaticPopup_Show("IDWLC_CLEAR_WISHLIST", RaidData:GetName(key))
+        StaticPopup_Show("NFLC_CLEAR_WISHLIST", RaidData:GetName(key))
     end, "Remove every pick (both lists) for this raid.")
     f.clearBtn:SetPoint("BOTTOMRIGHT", 0, titleY)
     f.importBtn = UI:Button(f, "Import", 70, 22, function()

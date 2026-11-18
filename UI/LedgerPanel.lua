@@ -1,4 +1,4 @@
--- IDontWannaLC - Ledger tab
+-- NostalgiaForeverLC - Ledger tab
 -- The loot ledger: every raid run with the addon on the left (newest first),
 -- and for the selected run what dropped on each boss and who the raid
 -- leader gave it to. Read-only apart from deleting a whole run.
@@ -17,8 +17,8 @@ local pendingDelete   -- run the delete popup will remove
 local pendingRestore  -- backup the restore popup will put back
 local syncNote        -- last message from pressing Sync (e.g. "not in a guild")
 
-StaticPopupDialogs["IDWLC_RESTORE_LEDGER"] = {
-    text = "I Don't Wanna LC:\nReplace the loot ledger with the backup from %s?\nThe ledger as it is now is backed up first.",
+StaticPopupDialogs["NFLC_RESTORE_LEDGER"] = {
+    text = "Nostalgia Forever LC:\nReplace the loot ledger with the backup from %s?\nThe ledger as it is now is backed up first.",
     button1 = YES,
     button2 = NO,
     OnAccept = function()
@@ -61,8 +61,8 @@ local function syncText()
     return result
 end
 
-StaticPopupDialogs["IDWLC_DELETE_RUN"] = {
-    text = "I Don't Wanna LC:\nDelete the ledger of %s? This can't be undone.",
+StaticPopupDialogs["NFLC_DELETE_RUN"] = {
+    text = "Nostalgia Forever LC:\nDelete the ledger of %s? This can't be undone.",
     button1 = YES,
     button2 = NO,
     OnAccept = function()
@@ -255,7 +255,7 @@ local function create(parent)
         for _, b in ipairs(Ledger:GetBackups()) do
             items[#items + 1] = { text = "Restore " .. backupLabel(b), func = function()
                 pendingRestore = b
-                StaticPopup_Show("IDWLC_RESTORE_LEDGER", date("%Y-%m-%d %H:%M", b.time))
+                StaticPopup_Show("NFLC_RESTORE_LEDGER", date("%Y-%m-%d %H:%M", b.time))
             end }
         end
         UI:ShowMenu(btn, items, 330)
@@ -284,7 +284,7 @@ local function create(parent)
     f.delete = UI:Button(f, "Delete", 70, 22, function()
         if not selected then return end
         pendingDelete = selected
-        StaticPopup_Show("IDWLC_DELETE_RUN", runTitle(selected))
+        StaticPopup_Show("NFLC_DELETE_RUN", runTitle(selected))
     end, "Delete this run from your ledger.")
     f.delete:SetPoint("TOPRIGHT", 0, -28)
     f.export = UI:Button(f, "Export", 70, 22, function()

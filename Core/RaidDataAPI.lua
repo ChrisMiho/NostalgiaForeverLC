@@ -1,4 +1,4 @@
--- IDontWannaLC - Raid data access
+-- NostalgiaForeverLC - Raid data access
 -- Lookups over Data/Raids.lua + Data/Forever.lua, plus loot learned at runtime
 -- (WoW Forever raid loot tables aren't datamined yet, so every epic+ item seen
 -- dropping in a raid is remembered and offered in the reserve browser).

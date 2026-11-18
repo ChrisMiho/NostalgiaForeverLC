@@ -120,13 +120,13 @@ G.GetItemInfoInstant = function(id) return id, "Armor", "Cloth", equip[id] or ""
 
 local ns = {}
 local files = {}
-for line in io.lines(ROOT .. "/IDontWannaLC.toc") do
+for line in io.lines(ROOT .. "/NostalgiaForeverLC.toc") do
     line = line:gsub("\r", "")
     if line ~= "" and line:sub(1, 1) ~= "#" then files[#files + 1] = (line:gsub("\\", "/")) end
 end
 for _, f in ipairs(files) do
     local chunk = assert(loadfile(ROOT .. "/" .. f))
-    chunk("IDontWannaLC", ns)
+    chunk("NostalgiaForeverLC", ns)
 end
 local Addon, UI = ns.Addon, ns.UI
 local R, RDA = ns.Reserves, ns.RaidDataAPI
@@ -135,7 +135,7 @@ local R, RDA = ns.Reserves, ns.RaidDataAPI
 assert(ns.RaidData.raids[1].key == "MC" and ns.RaidData.raids[1].bosses[1].name == "Lucifron")
 ns.RaidData.raids[1].bosses[1].items = { 16800, 16829, 16837, 16859, 16805, 16863, 17109, 18875 }
 local function event(e, ...) Addon.frame._scripts.OnEvent(Addon.frame, e, ...) end
-event("ADDON_LOADED", "IDontWannaLC")
+event("ADDON_LOADED", "NostalgiaForeverLC")
 
 local function check(cond, msg)
     if cond then
@@ -145,6 +145,8 @@ local function check(cond, msg)
         G.ERRORS = (G.ERRORS or 0) + 1
     end
 end
+check(G.SLASH_NOSTALGIAFOREVERLC1 == "/nflc" and G.SLASH_NOSTALGIAFOREVERLC2 == "/reserve"
+    and G.SLASH_NOSTALGIAFOREVERLC3 == "/idwlc" and G.SlashCmdList.NOSTALGIAFOREVERLC, "slash /nflc + aliases registered")
 local function has(text, needle) return type(text) == "string" and text:find(needle, 1, true) ~= nil end
 local function same(a, b)
     if #a ~= #b then return false end
@@ -179,7 +181,7 @@ check(ns.Roster:WhisperText({ status = "empty", name = "Bob" }) == nil
     and has(ns.Roster:WhisperText({ status = "noaddon", name = "Ann" }), "install"),
     "before approval only the install reminder applies")
 event("PLAYER_ENTERING_WORLD"); runTimers()
-local ap = G.IDWLC_Approve
+local ap = G.NFLC_Approve
 check(ap ~= nil and ap:IsShown(), "leader is prompted on entering the raid")
 check(ap.raid._text == "Molten Core" and ap.hard.value == 1 and ap.soft.value == 3, "prompt offers the defaults for the raid")
 check(ap.hard.minus._enabled == false, "hard count can't go below 1")
@@ -197,20 +199,20 @@ ap.approve:Click(); runTimers()
 local s = Addon.session
 check(s.approved and s.raidKey == "MC" and s.settings.hardReserves == 1 and s.settings.softReserves == 4,
     "approval sets the raid and counts")
-check(not ap:IsShown() and G.IDWLC_Main:IsShown() and UI:CurrentTab() == "roster", "approval opens the roster tab")
-check(chatHas("RAID: [IDWLC] Molten Core: 1 hard / 4 soft", chatMark), "approval announced in raid chat")
+check(not ap:IsShown() and G.NFLC_Main:IsShown() and UI:CurrentTab() == "roster", "approval opens the roster tab")
+check(chatHas("RAID: [NFLC] Molten Core: 1 hard / 4 soft", chatMark), "approval announced in raid chat")
 check(R:HasPreset("MC") and select(2, R:GetProposal("MC")) == 4, "approved counts remembered for the raid")
 R:LeaderApprove("MC", 0, 99); runTimers()
 check(s.settings.hardReserves == 1 and s.settings.softReserves == 10, "counts clamp to 1-10")
 event("PLAYER_LOGOUT")
-check(G.IDontWannaLCDB.session.approved == true and G.IDontWannaLCDB.session.raidKey == "MC", "approval survives a reload")
+check(G.NostalgiaForeverLCDB.session.approved == true and G.NostalgiaForeverLCDB.session.raidKey == "MC", "approval survives a reload")
 R:LeaderApprove("MC", 1, 2); runTimers()
 
 ---------------------------------------------------------------------------
 -- Raid cards (R1-R5)
 ---------------------------------------------------------------------------
 UI:ShowRaidList(); runTimers()
-local main = G.IDWLC_Main
+local main = G.NFLC_Main
 local rl, rf = UI.raidList, UI.raidView
 check(rl:IsShown() and not rf:IsShown(), "raids tab opens on the raid cards")
 local cards = liveRows(rl.list)
@@ -371,7 +373,7 @@ check(UI.settingsPanel.pages.general:IsShown() and not ml:IsShown(), "general su
 ---------------------------------------------------------------------------
 -- Roster tab (R23-R31)
 ---------------------------------------------------------------------------
-event("CHAT_MSG_ADDON", "IDWLC", "VER^0.3.0", "RAID", "Bob"); runTimers()
+event("CHAT_MSG_ADDON", "NFLC", "VER^0.3.0", "RAID", "Bob"); runTimers()
 check(ns.Comm.versions.Bob == "0.3.0", "version report recorded")
 UI:ShowMain("roster"); runTimers()
 local rp = UI.rosterPanel
@@ -389,17 +391,17 @@ local annRow = liveRows(rp.list)[1]
 check(annRow.whisper._shown and liveRows(rp.list)[3].whisper._shown == false, "whisper button only for players who need it")
 chatMark = #chat + 1
 annRow.whisper:Click(); runTimers()
-check(chatHas("WHISPER@Ann-Realm: [IDWLC]", chatMark) and chatHas("install", chatMark), "no-addon whisper sent to the player")
+check(chatHas("WHISPER@Ann-Realm: [NFLC]", chatMark) and chatHas("install", chatMark), "no-addon whisper sent to the player")
 check(ns.Roster:Whisper(annRow.data) == false and liveRows(rp.list)[1].whisper._enabled == false, "whispers are throttled")
 chatMark = #chat + 1
 rp.whisperAll:Click(); runTimers()
-check(chatHas("WHISPER@Bob: [IDWLC] You have no reserves set", chatMark) and not chatHas("WHISPER@Ann", chatMark),
+check(chatHas("WHISPER@Bob: [NFLC] You have no reserves set", chatMark) and not chatHas("WHISPER@Ann", chatMark),
     "whisper all reaches the rest once")
 -- Bob's client sends an incomplete set, then a full one.
-event("CHAT_MSG_ADDON", "IDWLC", "SET^MC^16837;16829", "RAID", "Bob"); runTimers()
+event("CHAT_MSG_ADDON", "NFLC", "SET^MC^16837;16829", "RAID", "Bob"); runTimers()
 check(rosterDump() == "Ann=noaddon Bob=partial Me=ready", "incomplete picks flagged: " .. rosterDump())
 check(has(liveRows(rp.list)[2].counts._text, "HR 1/1") and has(liveRows(rp.list)[2].counts._text, "SR 1/2"), "roster shows counts")
-event("CHAT_MSG_ADDON", "IDWLC", "SET^MC^16837;16829,16800", "RAID", "Bob"); runTimers()
+event("CHAT_MSG_ADDON", "NFLC", "SET^MC^16837;16829,16800", "RAID", "Bob"); runTimers()
 check(rosterDump() == "Ann=noaddon Bob=ready Me=ready", "complete picks ready: " .. rosterDump())
 check(R.LeaderRemove == nil, "leader has no way to edit another player's reserves")
 -- Lock / unlock, both announced. Locking with players not ready asks first.
@@ -410,8 +412,8 @@ local realPopup = G.StaticPopup_Show
 G.StaticPopup_Show = function(name, arg) popupText = name .. ": " .. tostring(arg) return realPopup(name, arg) end
 chatMark = #chat + 1
 rp.lock:Click(); runTimers()
-check(s.locked and chatHas("RAID: [IDWLC] Reserves for Molten Core are now LOCKED", chatMark), "lock announced in raid chat")
-check(has(popupText, "IDWLC_LOCK_ANYWAY") and has(popupText, "1 player(s) not ready: 1 without the addon"),
+check(s.locked and chatHas("RAID: [NFLC] Reserves for Molten Core are now LOCKED", chatMark), "lock announced in raid chat")
+check(has(popupText, "NFLC_LOCK_ANYWAY") and has(popupText, "1 player(s) not ready: 1 without the addon"),
     "leader is asked before locking with players not ready")
 G.StaticPopup_Show = realPopup
 check(has(liveRows(rp.list)[2].version._text, "0.3.0") and has(liveRows(rp.list)[2].version._text, "differs"),
@@ -421,12 +423,12 @@ check(R:Add(17109, "soft", "MC") == false, "lists can't change while locked")
 chatMark = #chat + 1
 rp.lock:Click(); runTimers()
 check(not s.locked and chatHas("UNLOCKED", chatMark), "unlock announced in raid chat")
-rp.export:Click(); print("export:", G.IDWLC_TextDialog.text)
+rp.export:Click(); print("export:", G.NFLC_TextDialog.text)
 -- A player who joins after the lock still gets a first set in, but can't change it.
 R:LeaderSetLocked(true); runTimers()
-event("CHAT_MSG_ADDON", "IDWLC", "SET^MC^17109;", "RAID", "Ann-Realm"); runTimers()
+event("CHAT_MSG_ADDON", "NFLC", "SET^MC^17109;", "RAID", "Ann-Realm"); runTimers()
 check(s.reserves.Ann and s.reserves.Ann.hard[1] == 17109, "late joiner's first set accepted while locked")
-event("CHAT_MSG_ADDON", "IDWLC", "SET^MC^18875;", "RAID", "Ann-Realm"); runTimers()
+event("CHAT_MSG_ADDON", "NFLC", "SET^MC^18875;", "RAID", "Ann-Realm"); runTimers()
 check(s.reserves.Ann.hard[1] == 17109, "no changes while locked")
 R:LeaderSetLocked(false); runTimers()
 -- Reserves of players who left the raid are dropped.
@@ -439,13 +441,13 @@ check(R:LeaderApprove("MC", 3, 3) == false, "counts frozen while locked")
 check(R:LeaderApprove("BWL", 1, 3) == true and s.raidKey == "BWL" and not s.locked and s.reserves.Bob == nil,
     "a different raid starts fresh and unlocked")
 R:LeaderApprove("MC", 1, 2); runTimers()
-event("CHAT_MSG_ADDON", "IDWLC", "SET^MC^16837;16829,16800", "RAID", "Bob"); runTimers()
+event("CHAT_MSG_ADDON", "NFLC", "SET^MC^16837;16829,16800", "RAID", "Bob"); runTimers()
 
 ---------------------------------------------------------------------------
 -- Loot window, rolls and the ledger (R32-R40) - as raid leader
 ---------------------------------------------------------------------------
 local Loot, Ledger = ns.Loot, ns.Ledger
-local function addon(msg, sender) event("CHAT_MSG_ADDON", "IDWLC", msg, "RAID", sender or "Bob"); runTimers() end
+local function addon(msg, sender) event("CHAT_MSG_ADDON", "NFLC", msg, "RAID", sender or "Bob"); runTimers() end
 -- Guild: Me, Bob and Cat are members; Ann is not.
 local guildRoster = { "Me-Realm", "Bob-Realm", "Cat-Realm" }
 G.IsInGuild = function() return true end
@@ -456,7 +458,7 @@ check(#Ledger:GetRuns() == 0, "ledger starts empty")
 event("ENCOUNTER_END", 663, "Lucifron", 9, 40, 1); runTimers()
 Loot:AddManual("|cffa335ee|Hitem:16800::::|h[Arcanist Boots]|h|r"); Addon:Fire("LOOT_ADDED"); runTimers()
 Loot:AddManual(19019); runTimers()
-local lo = G.IDWLC_Loot
+local lo = G.NFLC_Loot
 check(lo ~= nil and lo:IsShown(), "loot window pops up when loot drops")
 local lrows = liveRows(lo.list)
 check(#lrows == 3 and lrows[1].data.boss == "Lucifron" and has(lrows[1].boss._text, "Lucifron") and has(lrows[1].boss._text, "(2)"),
@@ -592,7 +594,7 @@ check(s.awards[#s.awards].player == "Ann" and s.awards[#s.awards].mode == "OPEN"
 local nAwards = #s.awards
 addon("AWARD^701^18875^Ann^OPEN")
 check(#s.awards == nAwards, "a repeated award for the same drop is recorded once")
-event("CHAT_MSG_ADDON", "IDWLC", "AWARD^702^16837^Bob^HARD", "WHISPER", "Bob"); runTimers()
+event("CHAT_MSG_ADDON", "NFLC", "AWARD^702^16837^Bob^HARD", "WHISPER", "Bob"); runTimers()
 check(#s.awards == nAwards and #s.reserves.Bob.hard == 1, "a whispered award is ignored")
 addon("UNAWARD^701^18875^Ann^0")
 addon("UNDROP^701")
@@ -615,8 +617,8 @@ roster[4] = { "Dan", 0, 1, 60, "Rogue", "ROGUE" }
 event("GROUP_ROSTER_UPDATE"); runTimers()
 chatMark = #chat + 1
 rp.import:Click()
-G.IDWLC_InputDialog.edit:SetText("Dan, 16863, HR\nDan, 18875, SR\nBob, 17109, SR\nZed, 16800, SR")
-G.IDWLC_InputDialog.accept:Click(); runTimers()
+G.NFLC_InputDialog.edit:SetText("Dan, 16863, HR\nDan, 18875, SR\nBob, 17109, SR\nZed, 16800, SR")
+G.NFLC_InputDialog.accept:Click(); runTimers()
 check(s.reserves.Dan and s.reserves.Dan.hard[1] == 16863 and s.reserves.Dan.soft[1] == 18875 and s.imported.Dan == true,
     "reserves entered for a player without the addon")
 check(#s.reserves.Bob.soft == 1 and s.reserves.Bob.soft[1] == 16829 and s.reserves.Zed == nil,
@@ -632,8 +634,8 @@ event("GROUP_ROSTER_UPDATE"); runTimers()
 check(s.reserves.Dan == nil, "imported player pruned on leaving")
 
 -- Lists as text, class check, tooltips.
-check(has(R:ExportWishlist("MC"), "IDWLC1!MC!16829,16800,16837!"), "list export: " .. R:ExportWishlist("MC"))
-local ikey, inh, ins = R:ImportWishlist("IDWLC1!ZG!16800,19019!16800,16805")
+check(has(R:ExportWishlist("MC"), "NFLC1!MC!16829,16800,16837!"), "list export: " .. R:ExportWishlist("MC"))
+local ikey, inh, ins = R:ImportWishlist("NFLC1!ZG!16800,19019!16800,16805")
 check(ikey == "ZG" and inh == 1 and ins == 1 and same(R:GetWishlist("ZG").hard, { 16800 }) and same(R:GetWishlist("ZG").soft, { 16805 }),
     "list import skips legendaries and duplicates")
 R:ClearWishlist("ZG")
@@ -791,7 +793,7 @@ check(#run.entries == 3 and run.entries[3].boss == "Magmadar", "member's ledger 
 addon("DROP^501^16805^Magmadar")
 check(#Loot.entries == 1 and #run.entries == 3, "a repeated drop message isn't counted twice")
 addon("ROLL^501^16805^SOFT^Me")
-local pop = G.IDWLC_RollPopup
+local pop = G.NFLC_RollPopup
 check(lo.panel.rollBtn._shown and lo.panel.awardBtn._shown == false and lo.panel.closeBtn._shown == false,
     "member gets a Roll button, no award controls")
 check(pop == nil or not pop:IsShown(), "no separate roll popup while the loot window is open")
@@ -812,7 +814,7 @@ check(not stillListed, "an item I won comes off my list")
 addon("DROP^502^16800^Magmadar")
 lo:Hide()
 addon("ROLL^502^16800^SOFT^Me,Bob")
-pop = G.IDWLC_RollPopup
+pop = G.NFLC_RollPopup
 check(pop ~= nil and pop:IsShown() and not lo:IsShown() and pop.rollBtn._shown and has(pop.status._text, "You may roll"),
     "roll popup when the loot window is closed")
 check(#Loot.entries == 2 and Loot.active and Loot.active.id == 502, "the roll is tracked in the loot window too")
@@ -882,7 +884,7 @@ check(not lo:IsShown() and #Loot.entries >= 3, "further drops and rolls don't re
 check(pop:IsShown(), "but I'm still offered a roll I can take")
 pop:Hide()
 UI:ShowLoot(); runTimers()
-check(lo:IsShown() and not UI:IsLootDismissed(), "/idwlc loot reopens it")
+check(lo:IsShown() and not UI:IsLootDismissed(), "/nflc loot reopens it")
 lo:Hide()
 addon("AWARD^601^17109^Bob"); addon("AWARD^602^18875^Bob"); addon("AWARD^603^16863^Bob")
 check(not UI:IsLootDismissed() and not lo:IsShown(), "once that loot is handed out the block is lifted")
@@ -899,7 +901,7 @@ lo:Hide()
 -- Member receives new rules from the leader via the Comm path.
 rf.banner:Hide(); main:Hide()
 local function cfg(h, so, locked)
-    event("CHAT_MSG_ADDON", "IDWLC", ("CFG^%d,%d,5,0,1,%d,MC"):format(h, so, locked and 1 or 0), "RAID", "Bob"); runTimers()
+    event("CHAT_MSG_ADDON", "NFLC", ("CFG^%d,%d,5,0,1,%d,MC"):format(h, so, locked and 1 or 0), "RAID", "Bob"); runTimers()
 end
 cfg(3, 1, false)
 check(main:IsShown() and rf:IsShown() and rf.banner:IsShown() and has(rf.banner.text._text, "Raid leader updated reserve rules"),

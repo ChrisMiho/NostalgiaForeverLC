@@ -1,4 +1,4 @@
--- IDontWannaLC - Raid stats
+-- NostalgiaForeverLC - Raid stats
 -- Per character, per raid: bosses killed in the current lockout and how many
 -- times the raid has been cleared. Fed by boss kills (ENCOUNTER_END) and
 -- reconciled with the game's saved-instance list, which also knows the boss

@@ -1,4 +1,4 @@
--- IDontWannaLC - UI widgets
+-- NostalgiaForeverLC - UI widgets
 -- Shared helpers for every window: movable titled windows, buttons, item
 -- rows with tooltips / shift-click linking, pooled scroll lists, a small
 -- custom popup menu (instead of UIDropDownMenu), shift-click link boxes and a
@@ -87,7 +87,7 @@ local function savePosition(f)
     if not db then return end
     db.framePositions = db.framePositions or {}
     local point, _, relPoint, x, y = f:GetPoint(1)
-    db.framePositions[f.idwlcName] = { point, relPoint, x, y }
+    db.framePositions[f.nflcName] = { point, relPoint, x, y }
 end
 
 -- Movable, ESC-closable window with a title and a close button. Created
@@ -95,9 +95,9 @@ end
 -- strata defaults to DIALOG; the main window uses MEDIUM so the dressing room
 -- and other game panels can open on top of it.
 function UI:CreateWindow(name, title, width, height, defaultPoint, strata)
-    local globalName = "IDWLC_" .. name
+    local globalName = "NFLC_" .. name
     local f = CreateFrame("Frame", globalName, UIParent, "BackdropTemplate")
-    f.idwlcName = name
+    f.nflcName = name
     f:SetSize(width, height)
     f:SetFrameStrata(strata or "DIALOG")
     f:SetToplevel(true)
@@ -311,7 +311,7 @@ end
 function UI:CreateScrollList(parent, rowHeight, createRow, updateRow, heightOf)
     scrollCount = scrollCount + 1
     -- Named: older UIPanelScrollFrameTemplate code looks up $parentScrollBar.
-    local sf = CreateFrame("ScrollFrame", "IDWLC_Scroll" .. scrollCount, parent, "UIPanelScrollFrameTemplate")
+    local sf = CreateFrame("ScrollFrame", "NFLC_Scroll" .. scrollCount, parent, "UIPanelScrollFrameTemplate")
     local content = CreateFrame("Frame", nil, sf)
     content:SetSize(1, 1)
     sf:SetScrollChild(content)
@@ -338,7 +338,7 @@ end
 local MENU_ROW, MENU_COL_W, MENU_MAX_ROWS = 16, 170, 20
 
 local function createMenu()
-    local m = CreateFrame("Frame", "IDWLC_Menu", UIParent, "BackdropTemplate")
+    local m = CreateFrame("Frame", "NFLC_Menu", UIParent, "BackdropTemplate")
     m:SetFrameStrata("FULLSCREEN_DIALOG")
     m:SetClampedToScreen(true)
     m:EnableMouse(true)
@@ -353,7 +353,7 @@ local function createMenu()
             self:Hide()
         end
     end)
-    tinsert(UISpecialFrames, "IDWLC_Menu")
+    tinsert(UISpecialFrames, "NFLC_Menu")
     m:Hide()
     return m
 end
@@ -484,7 +484,7 @@ function UI:ShowText(title, text)
     local f = self.textDialog
     if not f then
         f = self:CreateWindow("TextDialog", title, 480, 340)
-        local sf = CreateFrame("ScrollFrame", "IDWLC_TextScroll", f, "UIPanelScrollFrameTemplate")
+        local sf = CreateFrame("ScrollFrame", "NFLC_TextScroll", f, "UIPanelScrollFrameTemplate")
         sf:SetPoint("TOPLEFT", 14, -32)
         sf:SetPoint("BOTTOMRIGHT", -34, 34)
         local eb = CreateFrame("EditBox", nil, sf)
@@ -529,7 +529,7 @@ function UI:ShowInput(title, hint, acceptLabel, onAccept)
         local inset = self:Inset(f)
         inset:SetPoint("TOPLEFT", 12, -76)
         inset:SetPoint("BOTTOMRIGHT", -12, 44)
-        local sf = CreateFrame("ScrollFrame", "IDWLC_InputScroll", f, "UIPanelScrollFrameTemplate")
+        local sf = CreateFrame("ScrollFrame", "NFLC_InputScroll", f, "UIPanelScrollFrameTemplate")
         sf:SetPoint("TOPLEFT", inset, "TOPLEFT", 6, -6)
         sf:SetPoint("BOTTOMRIGHT", inset, "BOTTOMRIGHT", -28, 6)
         local eb = CreateFrame("EditBox", nil, sf)

@@ -1,4 +1,4 @@
--- IDontWannaLC - Loot window (everyone in the raid)
+-- NostalgiaForeverLC - Loot window (everyone in the raid)
 -- Pops up when loot drops. Lists the drops under the boss they came from,
 -- each with who may roll for it according to the hard / soft reserves, and
 -- shows the rolls as they come in. The raid leader starts rolls and awards
@@ -389,7 +389,7 @@ end
 
 local create
 create = function()
-    local f = UI:CreateWindow("Loot", "I Don't Wanna LC - Loot", WIDTH, HEIGHT)
+    local f = UI:CreateWindow("Loot", "Nostalgia Forever LC - Loot", WIDTH, HEIGHT)
     frame = f
     f.Refresh = refresh
 
@@ -428,7 +428,7 @@ create = function()
 
     createPanel(f)
 
-    local footer = UI:Label(f, "Close this window any time (X or Esc) - it stays closed until this loot is done. /idwlc loot reopens it.", "GameFontDisableSmall")
+    local footer = UI:Label(f, "Close this window any time (X or Esc) - it stays closed until this loot is done. /nflc loot reopens it.", "GameFontDisableSmall")
     footer:SetPoint("BOTTOM", 0, 14)
     footer:SetJustifyH("CENTER")
     return f
@@ -454,7 +454,7 @@ end
 -- waits until you are out of combat), and once you close it, it stays
 -- closed for the rest of that batch of loot: new drops and rolls only leave
 -- a line in chat. It opens by itself again after the current loot has all
--- been handed out. /idwlc loot reopens it at any time.
+-- been handed out. /nflc loot reopens it at any time.
 ---------------------------------------------------------------------------
 local dismissed = false   -- the user closed the window while loot was still being handled
 local pendingShow = false -- wanted to pop up during combat
@@ -479,7 +479,7 @@ local function autoShow()
     if dismissed then
         if GetTime() - lastHint > 20 then
             lastHint = GetTime()
-            Addon:Print("New loot - |cffffd100/idwlc loot|r to open the loot window.")
+            Addon:Print("New loot - |cffffd100/nflc loot|r to open the loot window.")
         end
         return
     end

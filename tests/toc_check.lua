@@ -1,8 +1,8 @@
--- Fails when Core/Data/UI .lua files on disk and IDontWannaLC.toc disagree.
+-- Fails when Core/Data/UI .lua files on disk and NostalgiaForeverLC.toc disagree.
 -- Run from the repo root: luajit tests/toc_check.lua
 local listed, onDisk, bad = {}, {}, false
 
-for line in io.lines("IDontWannaLC.toc") do
+for line in io.lines("NostalgiaForeverLC.toc") do
     line = line:gsub("\r", "")
     if line ~= "" and line:sub(1, 1) ~= "#" then
         listed[(line:gsub("\\", "/"))] = true
@@ -22,7 +22,7 @@ end
 
 for _, path in ipairs(sorted(onDisk)) do
     if not listed[path] then
-        print("toc_check: " .. path .. " not in IDontWannaLC.toc")
+        print("toc_check: " .. path .. " not in NostalgiaForeverLC.toc")
         bad = true
     end
 end
@@ -30,7 +30,7 @@ for _, path in ipairs(sorted(listed)) do
     if path:match("^[^/]+/.*%.lua$") and not onDisk[path] then
         local f = io.open(path, "r")
         if f then f:close() else
-            print("toc_check: " .. path .. " listed in IDontWannaLC.toc but missing")
+            print("toc_check: " .. path .. " listed in NostalgiaForeverLC.toc but missing")
             bad = true
         end
     end

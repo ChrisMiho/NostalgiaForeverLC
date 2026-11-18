@@ -1,22 +1,22 @@
--- IDontWannaLC - Slash commands
+-- NostalgiaForeverLC - Slash commands
 local _, ns = ...
 local Addon, Engine = ns.Addon, ns.Engine
 
 local HELP = {
-    "|cffffd100/idwlc|r - open the addon (raids, your reserve lists, settings)",
-    "|cffffd100/idwlc hr <item>|r / |cffffd100sr <item>|r - add/remove an item in your hard / soft tier for the current raid",
-    "|cffffd100/idwlc list|r - show reserves in chat",
-    "|cffffd100/idwlc loot|r - loot window (drops, who may roll, rolls)",
-    "|cffffd100/idwlc ledger|r - past raids: what dropped and who got it",
-    "|cffffd100/idwlc status|r - show raid settings and your reserves left",
+    "|cffffd100/nflc|r - open the addon (raids, your reserve lists, settings)",
+    "|cffffd100/nflc hr <item>|r / |cffffd100sr <item>|r - add/remove an item in your hard / soft tier for the current raid",
+    "|cffffd100/nflc list|r - show reserves in chat",
+    "|cffffd100/nflc loot|r - loot window (drops, who may roll, rolls)",
+    "|cffffd100/nflc ledger|r - past raids: what dropped and who got it",
+    "|cffffd100/nflc status|r - show raid settings and your reserves left",
     "Raid leader:",
-    "|cffffd100/idwlc roster|r - who has the addon / has picked (whisper reminders)",
-    "|cffffd100/idwlc approve [hard soft]|r - approve reserve counts (1-10) for the raid",
-    "|cffffd100/idwlc lock|r / |cffffd100unlock|r - lock reserves (announced in raid)",
-    "|cffffd100/idwlc raid <key>|r - start reserves for a raid (keys: see /idwlc raids)",
-    "|cffffd100/idwlc add <item>|r - add an item to the loot session",
-    "|cffffd100/idwlc reset|r - collect everyone's reserves again",
-    "|cffffd100/idwlc sync|r - re-broadcast settings and reserves",
+    "|cffffd100/nflc roster|r - who has the addon / has picked (whisper reminders)",
+    "|cffffd100/nflc approve [hard soft]|r - approve reserve counts (1-10) for the raid",
+    "|cffffd100/nflc lock|r / |cffffd100unlock|r - lock reserves (announced in raid)",
+    "|cffffd100/nflc raid <key>|r - start reserves for a raid (keys: see /nflc raids)",
+    "|cffffd100/nflc add <item>|r - add an item to the loot session",
+    "|cffffd100/nflc reset|r - collect everyone's reserves again",
+    "|cffffd100/nflc sync|r - re-broadcast settings and reserves",
 }
 
 local function itemArg(rest)
@@ -83,17 +83,17 @@ commands.ledger = function() if ns.UI and ns.UI.ShowMain then ns.UI:ShowMain("le
 commands.settings = function() if ns.UI and ns.UI.ShowMain then ns.UI:ShowMain("settings") end end
 commands.loot = function() if ns.UI and ns.UI.ToggleLoot then ns.UI:ToggleLoot() end end
 
--- "/idwlc approve" opens the prompt; "/idwlc approve 1 3" approves directly.
+-- "/nflc approve" opens the prompt; "/nflc approve 1 3" approves directly.
 commands.approve = function(rest)
     if not requireLeader() then return end
     local h, so = rest:match("^(%d+)%s+(%d+)$")
     if not h then
-        if rest ~= "" then Addon:Print("Usage: /idwlc approve [<hard> <soft>]  (1-10 each)") return end
+        if rest ~= "" then Addon:Print("Usage: /nflc approve [<hard> <soft>]  (1-10 each)") return end
         ns.Reserves:RequestApproval()
         return
     end
     local key = Addon.session.raidKey or (Addon:IsInRaidInstance() and ns.RaidDataAPI:Detect()) or nil
-    if not key then Addon:Print("Choose a raid first: /idwlc raid <key>") return end
+    if not key then Addon:Print("Choose a raid first: /nflc raid <key>") return end
     if ns.Reserves:LeaderApprove(key, tonumber(h), tonumber(so)) then
         local set = Addon.session.settings
         Addon:Print("Approved for %s: %d hard, %d soft per player.", ns.RaidDataAPI:GetName(key),
@@ -106,7 +106,7 @@ commands.lock = function()
     if not requireLeader() then return end
     local n, text = ns.Roster:NotReadySummary()
     if ns.Reserves:LeaderSetLocked(true) and n > 0 then
-        Addon:Print("Locked with %d player(s) not ready: %s. /idwlc unlock to let them finish.", n, text)
+        Addon:Print("Locked with %d player(s) not ready: %s. /nflc unlock to let them finish.", n, text)
     end
 end
 commands.unlock = function() if requireLeader() then ns.Reserves:LeaderSetLocked(false) end end
@@ -114,7 +114,7 @@ commands.unlock = function() if requireLeader() then ns.Reserves:LeaderSetLocked
 commands.raid = function(rest)
     if not requireLeader() then return end
     if not ns.RaidDataAPI:Get(rest) and not (Addon.db.learnedLoot[rest]) then
-        Addon:Print("Unknown raid key %s. See /idwlc raids.", rest)
+        Addon:Print("Unknown raid key %s. See /nflc raids.", rest)
         return
     end
     ns.Reserves:RequestApproval(rest)
@@ -145,9 +145,10 @@ commands.debug = function()
     Addon:Print("Debug %s.", Addon.db.debug and "on" or "off")
 end
 
-SLASH_IDONTWANNALC1 = "/idwlc"
-SLASH_IDONTWANNALC2 = "/reserve"
-SlashCmdList.IDONTWANNALC = function(msg)
+SLASH_NOSTALGIAFOREVERLC1 = "/nflc"
+SLASH_NOSTALGIAFOREVERLC2 = "/reserve"
+SLASH_NOSTALGIAFOREVERLC3 = "/idwlc"
+SlashCmdList.NOSTALGIAFOREVERLC = function(msg)
     msg = msg or ""
     local cmd, rest = msg:match("^%s*(%S*)%s*(.-)%s*$")
     cmd = (cmd or ""):lower()

@@ -1,4 +1,4 @@
--- IDontWannaLC - Loot ledger
+-- NostalgiaForeverLC - Loot ledger
 -- A permanent record (account wide) of every raid run with the addon: what
 -- dropped, on which boss, who the raid leader gave it to, how it was decided
 -- and the rolls. Every client in the raid keeps its own copy, written as the

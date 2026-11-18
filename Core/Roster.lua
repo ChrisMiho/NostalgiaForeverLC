@@ -1,4 +1,4 @@
--- IDontWannaLC - Roster inventory (raid leader)
+-- NostalgiaForeverLC - Roster inventory (raid leader)
 -- Who in the raid has the addon, who has sent reserves, and who still needs
 -- a nudge. The leader can whisper a player (a real, visible whisper sent on
 -- purpose by clicking a button) to ask them to install the addon or fill in
@@ -86,13 +86,13 @@ function Roster:WhisperText(row)
     local set = s.settings
     local raid = s.raidKey and ns.RaidDataAPI:GetName(s.raidKey) or "this raid"
     if row.status == STATUS.NOADDON then
-        return ("[IDWLC] This raid hands out loot with the \"I Don't Wanna LC\" addon (%d hard / %d soft reserves each). Please install it and pick your reserves for %s with /idwlc.")
+        return ("[NFLC] This raid hands out loot with the \"Nostalgia Forever LC\" addon (%d hard / %d soft reserves each). Please install it and pick your reserves for %s with /nflc.")
             :format(set.hardReserves, set.softReserves, raid)
     elseif row.status == STATUS.EMPTY then
-        return ("[IDWLC] You have no reserves set for %s yet. Open /idwlc and add up to %d hard / %d soft picks.")
+        return ("[NFLC] You have no reserves set for %s yet. Open /nflc and add up to %d hard / %d soft picks.")
             :format(raid, set.hardReserves, set.softReserves)
     elseif row.status == STATUS.PARTIAL then
-        return ("[IDWLC] Your reserves for %s are incomplete: %d/%d hard, %d/%d soft. Open /idwlc to add the rest.")
+        return ("[NFLC] Your reserves for %s are incomplete: %d/%d hard, %d/%d soft. Open /nflc to add the rest.")
             :format(raid, row.hard, set.hardReserves, row.soft, set.softReserves)
     end
 end

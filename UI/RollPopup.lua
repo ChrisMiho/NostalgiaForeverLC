@@ -1,4 +1,4 @@
--- IDontWannaLC - Roll popup (raid members)
+-- NostalgiaForeverLC - Roll popup (raid members)
 -- Shown when the raid leader puts an item up. Tells you how the item is
 -- handled and whether you may roll; "Roll" does /roll 1-100 for you.
 -- The raid leader uses the loot window instead, so the popup skips them; so

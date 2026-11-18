@@ -1,4 +1,4 @@
--- IDontWannaLC - Roster tab (raid leader only, while in a raid group)
+-- NostalgiaForeverLC - Roster tab (raid leader only, while in a raid group)
 -- The leader's inventory of the raid: who has the addon, who has sent their
 -- reserves, who is short - with a Whisper button per player to remind them.
 -- Also the leader's live controls: approve / change the counts, lock and
@@ -20,8 +20,8 @@ local STATUS_TEXT = {
     [STATUS.READY] = UI.Color(GREEN, "Ready"),
 }
 
-StaticPopupDialogs["IDWLC_LOCK_ANYWAY"] = {
-    text = "I Don't Wanna LC:\n%s.\n\nLock reserves anyway? Players who aren't ready keep what they have "
+StaticPopupDialogs["NFLC_LOCK_ANYWAY"] = {
+    text = "Nostalgia Forever LC:\n%s.\n\nLock reserves anyway? Players who aren't ready keep what they have "
         .. "(a player with nothing sent can still send a first set).",
     button1 = "Lock",
     button2 = CANCEL or "Cancel",
@@ -174,7 +174,7 @@ local function create(parent)
         -- Locking with people not ready is allowed, but never by accident.
         local n, text = Roster:NotReadySummary()
         if n > 0 then
-            StaticPopup_Show("IDWLC_LOCK_ANYWAY", ("%d player(s) not ready: %s"):format(n, text))
+            StaticPopup_Show("NFLC_LOCK_ANYWAY", ("%d player(s) not ready: %s"):format(n, text))
         else
             Reserves:LeaderSetLocked(true)
         end

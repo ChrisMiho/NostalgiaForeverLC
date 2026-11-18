@@ -1,4 +1,4 @@
--- Minimal test runner for the pure-Lua parts of IDontWannaLC.
+-- Minimal test runner for the pure-Lua parts of NostalgiaForeverLC.
 -- Usage (from repo root):  luajit tests/run.lua   (or lua5.1 tests/run.lua)
 
 package.path = "./?.lua;" .. package.path

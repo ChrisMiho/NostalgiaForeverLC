@@ -1,4 +1,4 @@
--- IDontWannaLC - Init
+-- NostalgiaForeverLC - Init
 -- Addon namespace, saved variables, event dispatch and small WoW API
 -- compatibility wrappers (WoW Forever runs the modern client; Classic Era
 -- clients are supported for testing).
@@ -8,11 +8,11 @@ local Engine = ns.Engine
 
 local Addon = {}
 ns.Addon = Addon
-_G.IDontWannaLC = Addon -- public handle for macros / debugging
+_G.NostalgiaForeverLC = Addon -- public handle for macros / debugging
 
 Addon.name = ADDON_NAME
 Addon.version = (C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata)(ADDON_NAME, "Version") or "dev"
-Addon.PREFIX = "IDWLC"
+Addon.PREFIX = "NFLC"
 Addon.COLOR = "|cff33ff99"
 
 ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ end
 ---------------------------------------------------------------------------
 function Addon:Print(msg, ...)
     if select("#", ...) > 0 then msg = msg:format(...) end
-    DEFAULT_CHAT_FRAME:AddMessage(Addon.COLOR .. "IDWLC|r: " .. tostring(msg))
+    DEFAULT_CHAT_FRAME:AddMessage(Addon.COLOR .. "NFLC|r: " .. tostring(msg))
 end
 
 function Addon:Debug(msg, ...)
@@ -286,12 +286,12 @@ function Addon:OnInit(fn) table.insert(initQueue, fn) end
 
 Addon:RegisterEvent("ADDON_LOADED", function(self, _, name)
     if name ~= ADDON_NAME then return end
-    IDontWannaLCDB = IDontWannaLCDB or {}
-    IDontWannaLCCharDB = IDontWannaLCCharDB or {}
-    applyDefaults(IDontWannaLCDB, DB_DEFAULTS)
-    applyDefaults(IDontWannaLCCharDB, CHAR_DEFAULTS)
-    self.db = IDontWannaLCDB
-    self.charDB = IDontWannaLCCharDB
+    NostalgiaForeverLCDB = NostalgiaForeverLCDB or {}
+    NostalgiaForeverLCCharDB = NostalgiaForeverLCCharDB or {}
+    applyDefaults(NostalgiaForeverLCDB, DB_DEFAULTS)
+    applyDefaults(NostalgiaForeverLCCharDB, CHAR_DEFAULTS)
+    self.db = NostalgiaForeverLCDB
+    self.charDB = NostalgiaForeverLCCharDB
 
     -- Restore or create the reserve session.
     self.session = Engine.NewSession(self.db.settings)

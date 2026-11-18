@@ -1,4 +1,4 @@
--- IDontWannaLC - Approval prompt (raid leader)
+-- NostalgiaForeverLC - Approval prompt (raid leader)
 -- Shown the first time the raid leader enters a raid (or when they ask for
 -- it from the Roster tab): confirm how many hard and soft reserves each
 -- player gets. Approving starts the inventory - the rules go to every client
@@ -60,7 +60,7 @@ local function create()
     end, "Send these counts to the raid and start collecting everyone's reserves.")
     f.approve:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -4, 14)
     f.later = UI:Button(f, "Later", 110, 24, function() f:Hide() end,
-        "Close without approving. Reopen from the Roster tab (/idwlc roster).")
+        "Close without approving. Reopen from the Roster tab (/nflc roster).")
     f.later:SetPoint("BOTTOMLEFT", f, "BOTTOM", 4, 14)
     return f
 end

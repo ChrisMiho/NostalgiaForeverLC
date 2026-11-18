@@ -1,4 +1,4 @@
--- IDontWannaLC - Settings tab
+-- NostalgiaForeverLC - Settings tab
 -- Sub-tabs:
 --   General      debug output, window positions, command reference
 --   Master Loot  the defaults you use when you lead a raid: hard / soft
@@ -14,14 +14,14 @@ local SUBTABS = { { key = "general", title = "General" }, { key = "masterloot", 
 local currentSub = "masterloot"
 
 local COMMANDS = table.concat({
-    "|cffffd100/idwlc|r  open this window",
-    "|cffffd100/idwlc hr <item>|r, |cffffd100/idwlc sr <item>|r  add or remove an item on the live raid's lists",
-    "|cffffd100/idwlc status|r, |cffffd100/idwlc list|r  your reserves / everyone's reserves",
+    "|cffffd100/nflc|r  open this window",
+    "|cffffd100/nflc hr <item>|r, |cffffd100/nflc sr <item>|r  add or remove an item on the live raid's lists",
+    "|cffffd100/nflc status|r, |cffffd100/nflc list|r  your reserves / everyone's reserves",
     "Raid leader:",
-    "|cffffd100/idwlc roster|r  who has picked, whisper reminders",
-    "|cffffd100/idwlc approve [hard soft]|r  approve the reserve counts",
-    "|cffffd100/idwlc lock|r, |cffffd100/idwlc unlock|r  lock or unlock reserves",
-    "|cffffd100/idwlc loot|r  loot session window",
+    "|cffffd100/nflc roster|r  who has picked, whisper reminders",
+    "|cffffd100/nflc approve [hard soft]|r  approve the reserve counts",
+    "|cffffd100/nflc lock|r, |cffffd100/nflc unlock|r  lock or unlock reserves",
+    "|cffffd100/nflc loot|r  loot session window",
 }, "\n")
 
 ---------------------------------------------------------------------------

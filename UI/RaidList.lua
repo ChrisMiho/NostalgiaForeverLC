@@ -1,4 +1,4 @@
--- IDontWannaLC - Raids tab (home screen)
+-- NostalgiaForeverLC - Raids tab (home screen)
 -- A stack of wide raid cards: name, the raid's graphic, size, lockout
 -- progress (X/N bosses), times cleared, last kill and how many picks you
 -- have saved for it. The raid the leader is running is first and marked

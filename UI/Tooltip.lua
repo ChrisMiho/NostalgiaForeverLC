@@ -1,4 +1,4 @@
--- IDontWannaLC - Item tooltips
+-- NostalgiaForeverLC - Item tooltips
 -- Adds reserve info to item tooltips everywhere in the game (bags, chat
 -- links, the loot frame, other addons): where the item sits on your own
 -- lists, and - in the live raid - who has it hard and soft reserved.
@@ -56,7 +56,7 @@ local function addLines(tooltip, itemID)
     local lines = UI.TooltipLines(itemID)
     if #lines == 0 then return end
     tooltip:AddLine(" ")
-    tooltip:AddLine("I Don't Wanna LC", 0.2, 1, 0.6)
+    tooltip:AddLine("Nostalgia Forever LC", 0.2, 1, 0.6)
     for _, l in ipairs(lines) do tooltip:AddLine(l[1], l[2], l[3], l[4], true) end
     tooltip:Show()
 end

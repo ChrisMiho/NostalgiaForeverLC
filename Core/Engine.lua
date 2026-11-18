@@ -1,4 +1,4 @@
--- IDontWannaLC - Engine
+-- NostalgiaForeverLC - Engine
 -- Pure loot-rules logic. No WoW API calls in this file so it can be unit
 -- tested outside the game (see tests/). Everything WoW-specific lives in the
 -- other Core/ files and calls into this module.
@@ -908,14 +908,14 @@ function Engine.ParseReserveImport(text)
 end
 
 -- A player's lists for one raid as a line of text (copy between characters,
--- paste to a friend): "IDWLC1!MC!16800,16829!16805".
+-- paste to a friend): "NFLC1!MC!16800,16829!16805".
 function Engine.EncodeWishlist(raidKey, wish)
-    return table.concat({ "IDWLC1", tostring(raidKey), Engine.JoinIDs(wish.hard or {}), Engine.JoinIDs(wish.soft or {}) }, "!")
+    return table.concat({ "NFLC1", tostring(raidKey), Engine.JoinIDs(wish.hard or {}), Engine.JoinIDs(wish.soft or {}) }, "!")
 end
 
 -- Returns raidKey, hard, soft - or nil when the text isn't a list.
 function Engine.DecodeWishlist(text)
-    local key, h, s = tostring(text or ""):match("IDWLC1!([^!%s]+)!([%d,]*)!([%d,]*)")
+    local key, h, s = tostring(text or ""):match("NFLC1!([^!%s]+)!([%d,]*)!([%d,]*)")
     if not key then return nil end
     return key, Engine.SplitIDs(h), Engine.SplitIDs(s)
 end

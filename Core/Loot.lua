@@ -1,4 +1,4 @@
--- IDontWannaLC - Loot
+-- NostalgiaForeverLC - Loot
 -- Loot master side (the raid leader, or the assistant the leader put in
 -- charge of loot): collect drops (corpse loot window, items received, or
 -- manually added links), decide who may roll using the reserve rules, track

@@ -1,4 +1,4 @@
--- IDontWannaLC - Comm
+-- NostalgiaForeverLC - Comm
 -- Addon-message protocol between raid members and the raid leader.
 --
 -- Messages are "^"-separated and always < 255 bytes:

@@ -1,4 +1,4 @@
--- IDontWannaLC - Main window
+-- NostalgiaForeverLC - Main window
 -- One window for everything a raider does: a row of tabs across the top and
 -- one panel per tab underneath. Panels register themselves (RaidList,
 -- RosterPanel, SettingsPanel) and are created the first time they are shown.
@@ -60,7 +60,7 @@ local function refresh(self)
 end
 
 local function create()
-    local f = UI:CreateWindow("Main", "I Don't Wanna LC", WIDTH, HEIGHT, nil, "MEDIUM")
+    local f = UI:CreateWindow("Main", "Nostalgia Forever LC", WIDTH, HEIGHT, nil, "MEDIUM")
     frame = f
     f.Refresh = refresh
 
