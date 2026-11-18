@@ -73,7 +73,7 @@ local preloadStep
 
 local function retry(ids)
     for _, id in ipairs(ids) do
-        if isCached(id) then
+        if isCached(id) or Addon:IsItemUnavailable(id) then
             preloadQueued[id] = nil
         else
             table.insert(preloadQueue, { id = id, pass = 2 })
@@ -86,7 +86,7 @@ function preloadStep()
     local n, firstPass = 0, {}
     while n < UI.PRELOAD_BATCH and #preloadQueue > 0 do
         local entry = table.remove(preloadQueue, 1)
-        if isCached(entry.id) then
+        if isCached(entry.id) or Addon:IsItemUnavailable(entry.id) then
             preloadQueued[entry.id] = nil
         else
             request(entry.id)
@@ -108,7 +108,7 @@ end
 
 function UI.PreloadItems(ids)
     for _, id in ipairs(ids) do
-        if not preloadQueued[id] and not isCached(id) then
+        if not preloadQueued[id] and not isCached(id) and not Addon:IsItemUnavailable(id) then
             preloadQueued[id] = true
             table.insert(preloadQueue, { id = id, pass = 1 })
         end

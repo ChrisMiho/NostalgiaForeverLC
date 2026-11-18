@@ -156,9 +156,11 @@ function RaidData:KeyForName(name)
 end
 
 -- A boss's loot as rows for the catalogue: slot headers followed by their
--- items, "Misc / Quest" last.
+-- items, "Misc / Quest" last. Items the client can't provide are left out;
+-- the second return is how many (R8b).
 function RaidData:GetLootRows(boss)
-    return ns.Engine.GroupBySlot(boss and boss.items or {}, function(id) return Addon:GetItemEquipLoc(id) end)
+    local available, hidden = ns.Engine.SplitAvailable(boss and boss.items, function(id) return Addon:IsItemUnavailable(id) end)
+    return ns.Engine.GroupBySlot(available, function(id) return Addon:GetItemEquipLoc(id) end), hidden
 end
 
 -- Raids list for the home screen, plus learned unknown raids.

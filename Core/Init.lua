@@ -137,6 +137,18 @@ function Addon:GetItemEquipLoc(itemID)
     return (select(9, GetItemInfo(itemID)))
 end
 
+-- Items the server refused this session (R8b). Never saved.
+local refusedItems = {}
+
+-- True when the server refused the item this session, or the client says it
+-- has no such item (R8b). Looked up at call time: not every client has it.
+function Addon:IsItemUnavailable(itemID)
+    if refusedItems[itemID] then return true end
+    local exists = C_Item and C_Item.DoesItemExistByID
+    if exists and exists(itemID) == false then return true end
+    return false
+end
+
 function Addon:GetLootMethod()
     if C_PartyInfo and C_PartyInfo.GetLootMethod then
         return C_PartyInfo.GetLootMethod()
@@ -280,6 +292,13 @@ frame:SetScript("OnEvent", function(_, event, ...)
         local ok, err = pcall(fn, Addon, event, ...)
         if not ok then geterrorhandler()(err) end
     end
+end)
+
+-- Only a refusal marks an item; a later success clears it; nil changes nothing.
+Addon:RegisterEvent("GET_ITEM_INFO_RECEIVED", function(_, _, itemID, success)
+    if not itemID then return end
+    if success == false then refusedItems[itemID] = true
+    elseif success == true then refusedItems[itemID] = nil end
 end)
 
 -- Modules register an init function to run after saved variables load.

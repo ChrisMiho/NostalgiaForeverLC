@@ -85,6 +85,7 @@ G.UnitIsGroupAssistant = function() return false end
 G.Ambiguate = function(n) return (n:gsub("%-.*$", "")) end
 G.GetBuildInfo = function() return "1.15", "1", "x", 11509 end
 G.C_AddOns = { GetAddOnMetadata = function() return "0.1.0" end }
+local notOut = {} -- ids the mock client has never heard of (R8b)
 local cache = { [19019] = { "Thunderfury", 5 }, [16800] = { "Arcanist Boots", 4 } }
 G.GetItemInfo = function(id)
     if type(id) == "string" then id = tonumber(id:match("item:(%d+)")) end
@@ -96,6 +97,7 @@ local itemRequests = {} -- { id, round } per server request (R8a)
 G.C_Item = {
     IsItemDataCachedByID = function(id) return cache[id] ~= nil end,
     RequestLoadItemDataByID = function(id) itemRequests[#itemRequests + 1] = { id = id, round = round } end,
+    DoesItemExistByID = function(id) return not notOut[id] end,
 }
 G.ITEM_QUALITY_COLORS = {}
 for q = 0, 7 do G.ITEM_QUALITY_COLORS[q] = { r = 1, g = 0.5, b = 0 } end
@@ -305,6 +307,26 @@ do
     row.item._scripts.OnLeave(row.item)
     event("GET_ITEM_INFO_RECEIVED", 16805, true); runTimers()
     check(tt._links == before + 1, "no redraw after the mouse leaves")
+end
+-- R8b: items the client can't provide are left out, per session.
+do
+    local function hiddenCount() local _, h = RDA:GetLootRows(RDA:GetBosses("MC")[1]); return h end
+    event("GET_ITEM_INFO_RECEIVED", 17109, false); event("GET_ITEM_INFO_RECEIVED", 16863, false); runTimers()
+    check(Addon:IsItemUnavailable(17109) and hiddenCount() == 2, "refused items are unavailable (R8b)")
+    event("GET_ITEM_INFO_RECEIVED", 16805); runTimers()
+    check(not Addon:IsItemUnavailable(16805), "nil success is ignored")
+    local before = #itemRequests
+    UI.PreloadItems({ 16863, 17109 }); runTimers(); runTimers()
+    check(#itemRequests == before, "refused items are not requested again (R8a)")
+    notOut[16800] = true
+    check(Addon:IsItemUnavailable(16800) and hiddenCount() == 3, "unknown to the client = unavailable")
+    local fn = G.C_Item.DoesItemExistByID; G.C_Item.DoesItemExistByID = nil
+    check(not Addon:IsItemUnavailable(16800) and Addon:IsItemUnavailable(16863), "no DoesItemExistByID: only refusals count")
+    G.C_Item.DoesItemExistByID = fn; notOut[16800] = nil
+    event("GET_ITEM_INFO_RECEIVED", 17109, true); event("GET_ITEM_INFO_RECEIVED", 16863, true); runTimers()
+    check(hiddenCount() == 0, "availability clears on a later success")
+    event("PLAYER_LOGOUT")
+    check(not G.NostalgiaForeverLCDB.unavailableItems and not G.NostalgiaForeverLCCharDB.unavailableItems, "unavailable set is not saved")
 end
 local bosses = liveRows(rf.bossList)
 check(#bosses == 11 and has(bosses[1].text._text, "Lucifron"), "boss catalogue listed")
