@@ -9,3 +9,5 @@ ignore:
   - .luacheckrc
   - README.md
   - PRD.md
+  - .claude
+  - CLAUDE.md

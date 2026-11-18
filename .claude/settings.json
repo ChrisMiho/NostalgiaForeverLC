@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash scripts/check.sh)",
+      "Bash(bash scripts/check.sh --quiet)",
+      "Bash(luajit tests/*)",
+      "Bash(luajit -bl *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/scripts/hooks/protect-generated.sh" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/scripts/check.sh --quiet || exit 2" }
+        ]
+      }
+    ]
+  }
+}
