@@ -19,13 +19,34 @@ function RaidData:IsForeverClient()
     return interface >= 16000 and interface < 20000
 end
 
--- Raids for the running client: WoW Forever raids on the Forever client,
--- Classic raids elsewhere (useful for testing on Classic Era).
+-- Raids for the running client. Forever client: the Forever raids first,
+-- then the Classic raids (for planning / reference), minus any Classic raid a
+-- Forever raid borrows its loot from (Onyxia), so it isn't listed twice.
+-- Other clients (Classic Era testing): the Classic raids only.
 function RaidData:GetAll()
-    local list = self:IsForeverClient() and RD.foreverRaids or RD.raids
     local out = {}
-    for _, raid in ipairs(list or {}) do table.insert(out, raid) end
+    if not self:IsForeverClient() then
+        for _, raid in ipairs(RD.raids or {}) do table.insert(out, raid) end
+        return out
+    end
+    local borrowed = {}
+    for _, raid in ipairs(RD.foreverRaids or {}) do
+        table.insert(out, raid)
+        if raid.lootFrom then borrowed[raid.lootFrom] = true end
+    end
+    for _, raid in ipairs(RD.raids or {}) do
+        if not borrowed[raid.key] then table.insert(out, raid) end
+    end
     return out
+end
+
+-- Any raid in the data, whether or not this client lists it.
+local function findAny(key)
+    for _, list in ipairs({ RD.raids or {}, RD.foreverRaids or {} }) do
+        for _, raid in ipairs(list) do
+            if raid.key == key then return raid end
+        end
+    end
 end
 
 function RaidData:Get(key)
@@ -75,8 +96,12 @@ function RaidData:GetBosses(key)
     local known = {}
     local raid = self:Get(key)
     if raid then
-        for _, boss in ipairs(raid.bosses or {}) do
-            table.insert(out, boss)
+        local bosses, tag = raid.bosses or {}, nil
+        -- No loot table of its own yet: borrow one (e.g. Classic Onyxia).
+        local source = #bosses == 0 and raid.lootFrom and findAny(raid.lootFrom)
+        if source then bosses, tag = source.bosses or {}, " (classic)" end
+        for _, boss in ipairs(bosses) do
+            table.insert(out, tag and { name = boss.name .. tag, items = boss.items } or boss)
             for _, id in ipairs(boss.items) do known[id] = true end
         end
     end

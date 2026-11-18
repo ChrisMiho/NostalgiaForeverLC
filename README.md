@@ -37,7 +37,15 @@ A **raid loot addon for WoW Forever** that runs your raid on **hard and soft res
 - Blizzard hasn't published loot tables or instance IDs yet. To cope with that, raids are matched by **instance name**, and the real ID is learned the first time you zone in. **Every epic+ item that drops is learned** into the reserve browser under "Seen in raid". Until then, players reserve by shift-clicking item links.
 - Future raids go in [Data/Forever.lua](Data/Forever.lua). The spring 2027 and summer 2027 raids are announced but not named yet.
 
-**Classic Era** (interface `11509`, useful for testing): Molten Core, Onyxia's Lair, Blackwing Lair, Zul'Gurub, AQ20, AQ40 and Naxxramas, with loot tables in [Data/Raids.lua](Data/Raids.lua). *The item IDs were written from memory and need checking against Wowhead.*
+- **Onyxia's Lair (Forever)** shows the **Classic Onyxia loot** for now, with the boss labelled "(classic)", so players have something to reserve. When its own loot table is known, fill in `bosses` and the classic list goes away.
+
+**Classic raids**: Molten Core, Onyxia's Lair, Blackwing Lair, Zul'Gurub, AQ20, AQ40 and Naxxramas. The loot tables in [Data/Raids.lua](Data/Raids.lua) are **generated from AtlasLootClassic** (boss loot and trash). On a Classic Era client (`11509`) these are the only raids. On the Forever client they're listed after the Forever raids, tagged *(Classic)*, for planning. Classic Onyxia is hidden there because Forever Onyxia already covers it.
+
+To regenerate the classic tables after AtlasLoot updates:
+
+```
+luajit tools/gen_classic_raids.lua "<WoW>/_forever_/Interface/AddOns/AtlasLootClassic_DungeonsAndRaids/data.lua" > Data/Raids.lua
+```
 
 ## Commands
 
@@ -77,7 +85,8 @@ Core/Reserves.lua       Player picks + leader authority and sync
 Core/Loot.lua           Drop detection, roll tracking, award announcements, member roll popup state
 Core/RaidDataAPI.lua    Raid lookup, instance detection, learned loot
 Core/Slash.lua          /idwlc commands
-Data/Raids.lua          Classic loot tables
+Data/Raids.lua          Classic loot tables (generated - see tools/)
+tools/                  gen_classic_raids.lua: builds Data/Raids.lua from AtlasLoot
 Data/Forever.lua        WoW Forever raids
 UI/*.lua                Reserve window, leader panel, loot window, roll popup
 tests/                  Unit tests (luajit tests/run.lua) + UI smoke test against a mock WoW API (luajit tests/smoke.lua .)
@@ -97,5 +106,5 @@ To install, copy or symlink this folder into `World of Warcraft/_forever_/Interf
 - **Not tested in game yet.** The UI and event wiring need a live test in a raid.
 - **WoW Forever loot method is unconfirmed.** Modern WoW has no master loot. The addon assumes the raid leader collects the items (from the loot window, or items that end up in their bags) and trades them out. Check this in game, for example with `/dump C_PartyInfo.GetLootMethod()`.
 - **Addon messages are restricted during boss encounters** on the modern client. The send queue pauses during encounters and drains afterwards, so sync reserves before pulls.
-- **Forever loot tables** are empty until items drop or the data is filled in. **Classic item IDs** need checking.
+- **Forever loot tables** are empty until items drop or the data is filled in. Forever Onyxia uses the Classic Onyxia list as a stand-in.
 - Only the raid leader is the authority. Assistant or loot-master delegation, MS/OS rolls for open items, a reserve import from sites like softres.it, and an award history UI would all be useful next.

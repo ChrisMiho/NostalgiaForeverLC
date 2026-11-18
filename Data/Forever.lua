@@ -38,12 +38,15 @@ add({
     instanceNames = { "Hyjal Summit" },
 })
 
+-- Until the Forever loot table is known, offer the Classic Onyxia loot
+-- (shown with a "(classic)" tag) so players have something to reserve.
 add({
     key = "F_ONY",
     name = "Onyxia's Lair (Forever)",
     size = 40,
     instanceIDs = {},
     instanceNames = { "Onyxia's Lair" },
+    lootFrom = "ONY",
 })
 
 return RD

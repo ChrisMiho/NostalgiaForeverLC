@@ -117,6 +117,10 @@ for _, f in ipairs(files) do
     chunk("IDontWannaLC", ns)
 end
 local Addon, UI = ns.Addon, ns.UI
+-- Fixed Lucifron rows so the UI checks below don't depend on the order of the
+-- generated loot data (Data/Raids.lua is regenerated from AtlasLoot).
+assert(ns.RaidData.raids[1].key == "MC" and ns.RaidData.raids[1].bosses[1].name == "Lucifron")
+ns.RaidData.raids[1].bosses[1].items = { 16800, 16829, 16837, 16859, 16805, 16863, 17109, 18875 }
 local function event(e, ...) Addon.frame._scripts.OnEvent(Addon.frame, e, ...) end
 event("ADDON_LOADED", "IDontWannaLC")
 Addon.session.raidKey = "MC"
@@ -295,5 +299,24 @@ check(rf.itemList.rows[1].hr._enabled == false and has(rf.raidNote._text, "Locke
 cfg(3, 1, false)
 Addon:Fire("SETTINGS_CHANGED", { hardReserves = 3, softReserves = 1 }, { hardReserves = 1, softReserves = 2 }, "MC", "MC", false, false); runTimers()
 check(has(rf.banner.text._text, "Hard reserves 3 -> 1"), "SETTINGS_CHANGED diff banner: " .. rf.banner.text._text)
+-- Forever client: Forever raids first, then Classic ones; Forever Onyxia
+-- borrows the Classic Onyxia loot and Classic Onyxia isn't listed twice.
+G.GetBuildInfo = function() return "1.60", "1", "x", 16001 end
+local RDA = ns.RaidDataAPI
+local choiceKeys = {}
+for i, c in ipairs(RDA:GetChoices()) do choiceKeys[c.key] = i end
+check(choiceKeys.F_BARROW == 1, "forever: Forever raids listed first")
+check(choiceKeys.MC and choiceKeys.NAXX and choiceKeys.F_ONY, "forever: classic raids listed too")
+check(choiceKeys.ONY == nil, "forever: classic Onyxia not listed twice")
+local onyBosses = RDA:GetBosses("F_ONY")
+check(#onyBosses >= 1 and has(onyBosses[1].name, "(classic)"), "forever Onyxia boss tagged classic")
+local onyIDs = {}
+for _, id in ipairs(onyBosses[1].items) do onyIDs[id] = true end
+check(onyIDs[16921] and onyIDs[18423], "forever Onyxia has classic loot")
+check(#RDA:GetBosses("F_BARROW") == 0, "Barrow Deeps still empty until it drops")
+local onyName = ns.RaidData.raids[2].bosses[1].name
+check(onyName == "Onyxia", "classic Onyxia boss name untouched: " .. onyName)
+G.GetBuildInfo = function() return "1.15", "1", "x", 11509 end
+
 print("ERRORS", G.ERRORS or 0)
 for _, c in ipairs(chat) do print(c) end

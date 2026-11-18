@@ -38,4 +38,26 @@ describe("raid data", function()
             checkRaid(raid, keys)
         end
     end)
+    it("borrowed loot points at a classic raid with loot", function()
+        local classic = {}
+        for _, raid in ipairs(RD.raids) do classic[raid.key] = raid end
+        local borrowers = 0
+        for _, raid in ipairs(FD.foreverRaids) do
+            if raid.lootFrom then
+                borrowers = borrowers + 1
+                local src = classic[raid.lootFrom]
+                truthy(src, raid.key .. " lootFrom " .. raid.lootFrom)
+                truthy(#src.bosses > 0, raid.lootFrom .. " has bosses")
+            end
+        end
+        truthy(borrowers >= 1, "Forever Onyxia borrows classic loot")
+    end)
+    it("onyxia has both faction heads", function()
+        local ony
+        for _, raid in ipairs(RD.raids) do if raid.key == "ONY" then ony = raid end end
+        local ids = {}
+        for _, id in ipairs(ony.bosses[1].items) do ids[id] = true end
+        truthy(ids[18422] and ids[18423], "Head of Onyxia, Horde and Alliance")
+        truthy(ids[17078], "Sapphiron Drape")
+    end)
 end)

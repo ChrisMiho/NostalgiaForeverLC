@@ -2,6 +2,7 @@ package-as: IDontWannaLC
 
 ignore:
   - tests
+  - tools
   - docs
   - .github
   - .luacheckrc

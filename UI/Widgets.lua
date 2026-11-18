@@ -368,10 +368,12 @@ end
 -- Raid picker menu shared by the reserve and leader windows.
 function UI:ShowRaidMenu(anchor, currentKey, onPick)
     local leaderKey = Addon.session.raidKey
+    local tagClassic = ns.RaidDataAPI:IsForeverClient()
     local items = {}
     for _, c in ipairs(ns.RaidDataAPI:GetChoices()) do
         local key = c.key
         local text = c.name
+        if tagClassic and c.expansion == "classic" then text = text .. " |cff9d9d9d(Classic)|r" end
         if key == leaderKey then text = text .. " |cff40ff40(raid)|r" end
         items[#items + 1] = { text = text, checked = key == currentKey, func = function() onPick(key) end }
     end
