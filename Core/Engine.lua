@@ -427,6 +427,21 @@ function Engine.GroupBySlot(items, equipLocOf)
     return rows
 end
 
+-- Leave out items the game client can't provide yet (R8b, e.g. loot not out
+-- yet). Keeps order. Returns available = {itemID...}, hidden = count removed.
+-- A nil isUnavailable hides nothing.
+function Engine.SplitAvailable(items, isUnavailable)
+    local available, hidden = {}, 0
+    for _, id in ipairs(items or {}) do
+        if isUnavailable and isUnavailable(id) then
+            hidden = hidden + 1
+        else
+            available[#available + 1] = id
+        end
+    end
+    return available, hidden
+end
+
 ---------------------------------------------------------------------------
 -- Roster inventory: where a raid member stands for the raid leader.
 ---------------------------------------------------------------------------
